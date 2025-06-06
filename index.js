@@ -1,53 +1,43 @@
-// bot.js
 import login from "fca-priyansh";
 import fs from "fs";
-import path from "path";
 
-const targetUID = "100031011381551"; // 🧿 Target UID daal yahan
-const delay = 30000; // 🕒 30 seconds
+const targetUID = "100031011381551"; // ✅ Yahan UID daal
+const delay = 30000;
 
-// Helper: Delay function
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Helper: Load np.txt
-function loadMessages() {
-  const filePath = path.resolve("np.txt");
-  if (!fs.existsSync(filePath)) {
-    console.error("❌ np.txt file nahi mila. Bana pehle.");
+function getMessages() {
+  if (!fs.existsSync("np.txt")) {
+    console.error("❌ np.txt file not found.");
     process.exit(1);
   }
-
-  const lines = fs.readFileSync(filePath, "utf8")
+  const lines = fs.readFileSync("np.txt", "utf8")
     .split("\n")
-    .map(line => line.trim())
-    .filter(line => line.length > 0);
-
+    .map(l => l.trim())
+    .filter(Boolean);
   if (lines.length === 0) {
-    console.error("❌ np.txt khaali hai. Kuch to likh bkl 😭");
+    console.error("❌ np.txt is empty.");
     process.exit(1);
   }
-
   return lines;
 }
 
-// Main Login + Loop
 login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, async (err, api) => {
-  if (err) {
-    console.error("❌ Login failed:", err);
-    return;
-  }
+  if (err) return console.error("❌ Login failed:", err);
 
-  console.log("✅ Bot logged in successfully.");
-  const messages = loadMessages();
+  console.log("✅ Logged in.");
+
+  const messages = getMessages();
   let index = 0;
 
   while (true) {
     const msg = messages[index];
+
     try {
       await api.sendMessage(msg, targetUID);
-      console.log(`📤 Sent to ${targetUID}: "${msg}"`);
-    } catch (e) {
-      console.error(`❌ Error sending to ${targetUID}: ${e.message || e}`);
+      console.log(`✅ Sent: "${msg}"`);
+    } catch (error) {
+      console.error(`❌ Error sending to UID ${targetUID}:`, error?.message || error);
     }
 
     index = (index + 1) % messages.length;
