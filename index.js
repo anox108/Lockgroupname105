@@ -1,43 +1,55 @@
-import login from "fca-priyansh";
-import fs from "fs";
+// server.js
+const express = require("express");
+const fs = require("fs");
+const login = require("fca-priyansh");
+const bodyParser = require("body-parser");
+const app = express();
+const PORT = 3000;
 
-const TARGET_UID = "100031011381551"; // Jis UID par msg bhejna hai
-const APPSTATE_PATH = "./appstate.json"; // Aapki appstate file ka path
+let api = null;
+let spamInterval = null;
+let isSpamming = false;
 
-async function start() {
-  let appState;
-  try {
-    appState = JSON.parse(fs.readFileSync(APPSTATE_PATH, "utf8"));
-  } catch (e) {
-    console.error("Appstate file load nahi ho paya:", e.message);
+app.use(express.static("public"));
+app.use(bodyParser.json());
+
+const APPSTATE = JSON.parse(fs.readFileSync("appstate.json", "utf8"));
+
+login({ appState: APPSTATE }, (err, _api) => {
+  if (err) {
+    console.error("Login failed:", err);
     return;
   }
+  api = _api;
+  api.setOptions({ listenEvents: false });
+  console.log("✅ Logged in.");
+});
 
-  login({ appState }, async (err, api) => {
-    if (err) {
-      console.error("Login failed:", err.message || err);
-      return;
-    }
-    console.log("Login successful!");
+app.post("/start", (req, res) => {
+  const { uid, message, interval } = req.body;
+  if (!api || isSpamming) return res.json({ status: "Already running or not logged in" });
 
-    const messages = [
-      "Hello!",
-      "Yeh message bot se aa raha hai.",
-      "Nonstop messages chal rahe hain.",
-    ];
+  let i = 0;
+  isSpamming = true;
+  const messages = message.split("\n").map(m => m.trim()).filter(Boolean);
 
-    let i = 0;
+  spamInterval = setInterval(() => {
+    if (!isSpamming || !messages.length) return;
+    const msg = messages[i % messages.length];
+    api.sendMessage(msg, uid, err => {
+      if (err) console.error("Send Error:", err.message);
+      else console.log("✅ Sent:", msg);
+    });
+    i++;
+  }, parseInt(interval) || 30000);
 
-    setInterval(async () => {
-      try {
-        await api.sendMessage(messages[i], TARGET_UID);
-        console.log(`Message sent to ${TARGET_UID}: ${messages[i]}`);
-        i = (i + 1) % messages.length;
-      } catch (sendErr) {
-        console.error("Message send karte waqt error:", sendErr.message || sendErr);
-      }
-    }, 30000); // Har 30 second me message bheje
-  });
-}
+  res.json({ status: "Started" });
+});
 
-start();
+app.post("/stop", (_req, res) => {
+  clearInterval(spamInterval);
+  isSpamming = false;
+  res.json({ status: "Stopped" });
+});
+
+app.listen(PORT, () => console.log(`🌐 Running on http://localhost:${PORT}`));
