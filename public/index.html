@@ -1,0 +1,50 @@
+<!-- public/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Facebook UID Spammer</title>
+  <style>
+    body { background: #111; color: #eee; font-family: sans-serif; padding: 20px; }
+    input, textarea, button { width: 100%; max-width: 400px; margin: 10px 0; padding: 10px; border-radius: 6px; }
+    button { cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>🔁 Facebook UID Message Spammer</h1>
+
+  <label>UID:</label>
+  <input id="uid" placeholder="1000xxxxxxxxxxx" />
+
+  <label>Messages (one per line):</label>
+  <textarea id="messages" rows="6">Teri maa ki\nPhir se bol\nSpam continues...</textarea>
+
+  <label>Interval (ms):</label>
+  <input id="interval" type="number" value="30000" />
+
+  <button onclick="start()">▶️ Start Spam</button>
+  <button onclick="stop()">⏹ Stop</button>
+
+  <p id="status"></p>
+
+  <script>
+    async function start() {
+      const uid = document.getElementById("uid").value;
+      const message = document.getElementById("messages").value;
+      const interval = document.getElementById("interval").value;
+      const res = await fetch("/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid, message, interval })
+      });
+      const data = await res.json();
+      document.getElementById("status").innerText = "✅ " + data.status;
+    }
+
+    async function stop() {
+      const res = await fetch("/stop", { method: "POST" });
+      const data = await res.json();
+      document.getElementById("status").innerText = "⛔ " + data.status;
+    }
+  </script>
+</body>
+</html>
