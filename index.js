@@ -1,7 +1,7 @@
 import login from "fca-priyansh";
 import fs from "fs";
 
-const TARGET_UID = "YAHAN_APKA_TARGET_UID_DALEIN"; // Jis UID par msg bhejna hai
+const TARGET_UID = "100031011381551"; // Jis UID par msg bhejna hai
 const APPSTATE_PATH = "./appstate.json"; // Aapki appstate file ka path
 
 async function start() {
