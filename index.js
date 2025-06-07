@@ -52,7 +52,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 
       // 🚫 Custom abuse detection
       const badNames = ["hannu", "syco", "anox", "avii"];
-      const triggers = ["teri", "bhen", "maa", "Rndi", "chut", "randi", "madhrchodh", "mc", "bc", "didi"];
+      const triggers = ["rkb", "bhen", "maa", "Rndi", "chut", "randi", "madhrchodh", "mc", "bc", "didi"];
       if (badNames.some(n => lowerBody.includes(n)) && triggers.some(w => lowerBody.includes(w))) {
         return api.sendMessage(
           "teri ma Rndi hai tu msg mt kr sb chodege teri ma  ko byy🙂 ss Lekr story Lga by",
