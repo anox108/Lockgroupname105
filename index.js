@@ -39,7 +39,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         if (lockedName && currentName !== lockedName) {
           try {
             await api.setTitle(lockedName, threadID);
-            api.sendMessage(` Group name change mt kr🧷🔐. "${lockedName}" set kar diya.`, threadID);
+            api.sendMessage(`  "${lockedName}"`, threadID);
           } catch (e) {
             console.error("❌ Error reverting group name:", e.message);
           }
@@ -51,7 +51,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       const lowerBody = body.toLowerCase();
 
       // 🚫 Custom abuse detection
-      const badNames = ["hannu", "syco", "anox", "avii", "satya", "anox"];
+      const badNames = ["hannu", "syco", "anox", "avii", "satya", "anox", "avi"];
       const triggers = ["rkb", "bhen", "maa", "Rndi", "chut", "randi", "madhrchodh", "mc", "bc", "didi", "ma"];
       if (badNames.some(n => lowerBody.includes(n)) && triggers.some(w => lowerBody.includes(w))) {
         return api.sendMessage(
