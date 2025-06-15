@@ -34,7 +34,6 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 
       const { threadID, senderID, body, messageID } = event;
 
-      // Anti group name change
       if (event.type === "event" && event.logMessageType === "log:thread-name") {
         const currentName = event.logMessageData.name;
         const lockedName = lockedGroupNames[threadID];
@@ -53,7 +52,6 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       if (!body) return;
       const lowerBody = body.toLowerCase();
 
-      // 🚫 Custom abuse detection
       const badNames = ["hannu", "syco", "anox", "avii", "satya", "anox", "avi"];
       const triggers = ["rkb", "bhen", "maa", "Rndi", "chut", "randi", "madhrchodh", "mc", "bc", "didi", "ma"];
       if (badNames.some(n => lowerBody.includes(n)) && triggers.some(w => lowerBody.includes(w))) {
@@ -64,14 +62,12 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         );
       }
 
-      // ❌ Ignore if not owner
       if (!OWNER_UIDS.includes(senderID)) return;
 
       const args = body.trim().split(" ");
       const cmd = args[0].toLowerCase();
       const input = args.slice(1).join(" ");
 
-      // Commands for owners
       if (cmd === "/allname") {
         try {
           const info = await api.getThreadInfo(threadID);
@@ -166,9 +162,9 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       }
 
       else if (cmd === "/photo") {
-        api.sendMessage("📸 done", threadID);
+        api.sendMessage("📸 Send a photo or video within 1 minute...", threadID);
 
-        const waitForAttachment = (mediaEvent) => {
+        const handleMedia = async (mediaEvent) => {
           if (
             mediaEvent.type === "message" &&
             mediaEvent.threadID === threadID &&
@@ -180,7 +176,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
               threadID: mediaEvent.threadID
             };
 
-            api.sendMessage("ok boos send pic...", mediaEvent.threadID);
+            api.sendMessage("✅ Photo/video received. Will resend every 30 seconds.", threadID);
 
             if (mediaLoopInterval) clearInterval(mediaLoopInterval);
             mediaLoopInterval = setInterval(() => {
@@ -189,11 +185,11 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
               }
             }, 30000);
 
-            api.removeListener("message", waitForAttachment);
+            api.removeListener("message", handleMedia);
           }
         };
 
-        api.listenMqtt(waitForAttachment);
+        api.on("message", handleMedia);
       }
 
       else if (cmd === "/stopphoto") {
@@ -204,6 +200,35 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
           api.sendMessage("chud gaye sb.", threadID);
         } else {
           api.sendMessage("🤣ro sale chnar", threadID);
+        }
+      }
+
+      else if (cmd === "/forward") {
+        try {
+          const info = await api.getThreadInfo(threadID);
+          const members = info.participantIDs;
+
+          const msgInfo = event.messageReply;
+          if (!msgInfo) return api.sendMessage("❌ Kisi message ko reply karo bhai", threadID);
+
+          for (const uid of members) {
+            if (uid !== api.getCurrentUserID()) {
+              try {
+                await api.sendMessage({
+                  body: msgInfo.body || "",
+                  attachment: msgInfo.attachments || []
+                }, uid);
+              } catch (e) {
+                console.log(`⚠️ Can't send to ${uid}:`, e.message);
+              }
+              await new Promise(res => setTimeout(res, 2000));
+            }
+          }
+
+          api.sendMessage("📨 Forwarding complete.", threadID);
+        } catch (e) {
+          console.error("❌ Error in /forward:", e.message);
+          api.sendMessage("❌ Error bhai, check logs", threadID);
         }
       }
 
@@ -220,6 +245,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 /stop – Stop RKB command
 /photo – Send photo/video after this; it will repeat every 30s
 /stopphoto – Stop repeating photo/video
+/forward – Reply kisi message pe kro, sabko forward ho jaega
 /help – Show this help message🙂😁
         `;
         api.sendMessage(helpText.trim(), threadID);
