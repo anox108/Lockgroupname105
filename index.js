@@ -9,7 +9,7 @@ const lockedGroupNames = {};
 
 let mediaLoopInterval = null;
 let lastMedia = null;
-let targetUIDs = []; // ✅ Modified to support multiple targets
+let targetUID = null;
 
 const app = express();
 app.get("/", (_, res) => res.send("<h2>Messenger Bot Running</h2>"));
@@ -18,7 +18,6 @@ app.listen(20782, () => console.log("🌐 Log server: http://localhost:20782"));
 process.on("uncaughtException", (err) => {
   console.error("❗ Uncaught Exception:", err.message);
 });
-
 process.on("unhandledRejection", (reason) => {
   console.error("❗ Unhandled Rejection:", reason);
 });
@@ -31,13 +30,15 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
   api.listenMqtt(async (err, event) => {
     try {
       if (err || !event) return;
+
       const { threadID, senderID, body, messageID } = event;
 
-      // ✅ Target reply with message reply
+      // ✅ Fixed: Respond to targetUID only if message is a reply
       if (
-        targetUIDs.includes(senderID) &&
-        fs.existsSync("np.txt") &&
-        event.type === "message"
+        targetUID &&
+        senderID === targetUID &&
+        event.messageReply &&
+        fs.existsSync("np.txt")
       ) {
         const lines = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);
         if (lines.length > 0) {
@@ -45,7 +46,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
           api.sendMessage(
             {
               body: randomLine,
-              replyToMessage: messageID
+              messageID: event.messageReply.messageID
             },
             threadID
           );
@@ -55,7 +56,6 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       if (event.type === "event" && event.logMessageType === "log:thread-name") {
         const currentName = event.logMessageData.name;
         const lockedName = lockedGroupNames[threadID];
-
         if (lockedName && currentName !== lockedName) {
           try {
             await api.setTitle(lockedName, threadID);
@@ -91,7 +91,6 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
           const info = await api.getThreadInfo(threadID);
           const members = info.participantIDs;
           api.sendMessage(`🛠  ${members.length} ' nicknames...`, threadID);
-
           for (const uid of members) {
             try {
               await api.changeNickname(input, threadID, uid);
@@ -101,7 +100,6 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
               console.log(`⚠️ Failed for ${uid}:`, e.message);
             }
           }
-
           api.sendMessage("ye gribh ka bcha to Rone Lga bkL", threadID);
         } catch (e) {
           console.error("❌ Error in /allname:", e);
@@ -151,10 +149,8 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         const name = input.trim();
         const lines = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);
         stopRequested = false;
-
         if (rkbInterval) clearInterval(rkbInterval);
         let index = 0;
-
         rkbInterval = setInterval(() => {
           if (index >= lines.length || stopRequested) {
             clearInterval(rkbInterval);
@@ -164,7 +160,6 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
           api.sendMessage(`${name} ${lines[index]}`, threadID);
           index++;
         }, 40000);
-
         api.sendMessage(`sex hogya bche 🤣rkb ${name}`, threadID);
       }
 
@@ -181,7 +176,6 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 
       else if (cmd === "/photo") {
         api.sendMessage("📸 Send a photo or video within 1 minute...", threadID);
-
         const handleMedia = async (mediaEvent) => {
           if (
             mediaEvent.type === "message" &&
@@ -193,20 +187,16 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
               attachments: mediaEvent.attachments,
               threadID: mediaEvent.threadID
             };
-
             api.sendMessage("✅ Photo/video received. Will resend every 30 seconds.", threadID);
-
             if (mediaLoopInterval) clearInterval(mediaLoopInterval);
             mediaLoopInterval = setInterval(() => {
               if (lastMedia) {
                 api.sendMessage({ attachment: lastMedia.attachments }, lastMedia.threadID);
               }
             }, 30000);
-
             api.removeListener("message", handleMedia);
           }
         };
-
         api.on("message", handleMedia);
       }
 
@@ -225,10 +215,8 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         try {
           const info = await api.getThreadInfo(threadID);
           const members = info.participantIDs;
-
           const msgInfo = event.messageReply;
           if (!msgInfo) return api.sendMessage("❌ Kisi message ko reply karo bhai", threadID);
-
           for (const uid of members) {
             if (uid !== api.getCurrentUserID()) {
               try {
@@ -242,28 +230,22 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
               await new Promise(res => setTimeout(res, 2000));
             }
           }
-
           api.sendMessage("📨 Forwarding complete.", threadID);
         } catch (e) {
           console.error("❌ Error in /forward:", e.message);
-          api.sendMessage("mja na aaya Bhen la Loda kLp gya tha yo hetter", threadID);
+          api.sendMessage("❌ Error bhai, check logs", threadID);
         }
       }
 
       else if (cmd === "/target") {
-        if (!args[1]) return api.sendMessage("👤 UID de", threadID);
-        const newTarget = args[1];
-        if (!targetUIDs.includes(newTarget)) {
-          targetUIDs.push(newTarget);
-          api.sendMessage(`chudega aane de sale ko: ${newTarget}`, threadID);
-        } else {
-          api.sendMessage("⚠️ ye chud rha phele se.", threadID);
-        }
+        if (!args[1]) return api.sendMessage("👤 UID de jisko target krna h", threadID);
+        targetUID = args[1];
+        api.sendMessage(`🎯 Target set: ${targetUID}`, threadID);
       }
 
       else if (cmd === "/cleartarget") {
-        targetUIDs = [];
-        api.sendMessage("🤣ro gya", threadID);
+        targetUID = null;
+        api.sendMessage("🚫 Target cleared.", threadID);
       }
 
       else if (cmd === "/help") {
@@ -280,7 +262,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 /photo – Send photo/video after this; it will repeat every 30s
 /stopphoto – Stop repeating photo/video
 /forward – Reply kisi message pe kro, sabko forward ho jaega
-/target <uid> – aane to de chudega dikhte hi
+/target <uid> – Kisi UID ko target kr, msg pe random gali dega
 /cleartarget – Target hata dega
 /help – Show this help message🙂😁
         `;
