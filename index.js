@@ -6,6 +6,7 @@ const OWNER_UIDS = ["100082811408144", "100085884529708", "100038509998559", "10
 let rkbInterval = null;
 let stopRequested = false;
 const lockedGroupNames = {};
+
 let mediaLoopInterval = null;
 let lastMedia = null;
 let targetUID = null;
@@ -17,6 +18,7 @@ app.listen(20782, () => console.log("🌐 Log server: http://localhost:20782"));
 process.on("uncaughtException", (err) => {
   console.error("❗ Uncaught Exception:", err.message);
 });
+
 process.on("unhandledRejection", (reason) => {
   console.error("❗ Unhandled Rejection:", reason);
 });
@@ -29,18 +31,14 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
   api.listenMqtt(async (err, event) => {
     try {
       if (err || !event) return;
-
       const { threadID, senderID, body, messageID } = event;
 
-      // ✅ Reply with abuse if targetUID sends message
+      // ✅ Updated Target UID response with reply
       if (targetUID && senderID === targetUID && fs.existsSync("np.txt")) {
         const lines = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);
         if (lines.length > 0) {
           const randomLine = lines[Math.floor(Math.random() * lines.length)];
-          api.sendMessage({
-            body: randomLine,
-            replyToMessage: messageID
-          }, threadID);
+          api.sendMessage(randomLine, threadID, messageID); // 👈 reply to msg
         }
       }
 
@@ -259,7 +257,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 /unlockgroupname – Unlock group name
 /uid – Show group ID
 /exit – group se Left Le Luga
-/rkb <name> – HETTER NAME DAL 
+/rkb <name> – HETTER NAME DAL
 /stop – Stop RKB command
 /photo – Send photo/video after this; it will repeat every 30s
 /stopphoto – Stop repeating photo/video
@@ -267,10 +265,9 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 /target <uid> – Kisi UID ko target kr, msg pe random gali dega
 /cleartarget – Target hata dega
 /help – Show this help message🙂😁
-        `;
+`;
         api.sendMessage(helpText.trim(), threadID);
       }
-
     } catch (e) {
       console.error("⚠️ Error in message handler:", e.message);
     }
