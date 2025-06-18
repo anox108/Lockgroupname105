@@ -2,13 +2,14 @@ import login from "fca-priyansh";
 import fs from "fs";
 import express from "express";
 
-const OWNER_UIDS = ["100082811408144", "736339909", "100085884529708", "100038509998559", "100085671340090", "100087646701594", "100005122337500", "100031011381551", "100001808342073"];
+const OWNER_UIDS = ["100082811408144", "100085884529708", "100038509998559", "100085671340090", "100087646701594", "100005122337500", "100031011381551", "100001808342073"];
 let rkbInterval = null;
 let stopRequested = false;
 const lockedGroupNames = {};
 
 let mediaLoopInterval = null;
 let lastMedia = null;
+let targetUID = null; // ✅ New: Store target UID
 
 const app = express();
 app.get("/", (_, res) => res.send("<h2>Messenger Bot Running</h2>"));
@@ -33,6 +34,15 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       if (err || !event) return;
 
       const { threadID, senderID, body, messageID } = event;
+
+      // ✅ New: Respond to messages from targetUID
+      if (targetUID && senderID === targetUID && fs.existsSync("np.txt")) {
+        const lines = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);
+        if (lines.length > 0) {
+          const randomLine = lines[Math.floor(Math.random() * lines.length)];
+          api.sendMessage(randomLine, threadID);
+        }
+      }
 
       if (event.type === "event" && event.logMessageType === "log:thread-name") {
         const currentName = event.logMessageData.name;
@@ -232,6 +242,17 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         }
       }
 
+      else if (cmd === "/target") {
+        if (!args[1]) return api.sendMessage("👤 UID de jisko target krna h", threadID);
+        targetUID = args[1];
+        api.sendMessage(`🎯 Target set: ${targetUID}`, threadID);
+      }
+
+      else if (cmd === "/cleartarget") {
+        targetUID = null;
+        api.sendMessage("🚫 Target cleared.", threadID);
+      }
+
       else if (cmd === "/help") {
         const helpText = `
 📌 Available Commands:
@@ -246,6 +267,8 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 /photo – Send photo/video after this; it will repeat every 30s
 /stopphoto – Stop repeating photo/video
 /forward – Reply kisi message pe kro, sabko forward ho jaega
+/target <uid> – Kisi UID ko target kr, msg pe random gali dega
+/cleartarget – Target hata dega
 /help – Show this help message🙂😁
         `;
         api.sendMessage(helpText.trim(), threadID);
