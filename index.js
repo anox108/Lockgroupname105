@@ -6,7 +6,6 @@ const OWNER_UIDS = ["100082811408144", "100085884529708", "100038509998559", "10
 let rkbInterval = null;
 let stopRequested = false;
 const lockedGroupNames = {};
-
 let mediaLoopInterval = null;
 let lastMedia = null;
 let targetUID = null;
@@ -33,23 +32,15 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 
       const { threadID, senderID, body, messageID } = event;
 
-      // ✅ Fixed: Respond to targetUID only if message is a reply
-      if (
-        targetUID &&
-        senderID === targetUID &&
-        event.messageReply &&
-        fs.existsSync("np.txt")
-      ) {
+      // ✅ Reply with abuse if targetUID sends message
+      if (targetUID && senderID === targetUID && fs.existsSync("np.txt")) {
         const lines = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);
         if (lines.length > 0) {
           const randomLine = lines[Math.floor(Math.random() * lines.length)];
-          api.sendMessage(
-            {
-              body: randomLine,
-              messageID: event.messageReply.messageID
-            },
-            threadID
-          );
+          api.sendMessage({
+            body: randomLine,
+            replyToMessage: messageID
+          }, threadID);
         }
       }
 
@@ -149,8 +140,10 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         const name = input.trim();
         const lines = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);
         stopRequested = false;
+
         if (rkbInterval) clearInterval(rkbInterval);
         let index = 0;
+
         rkbInterval = setInterval(() => {
           if (index >= lines.length || stopRequested) {
             clearInterval(rkbInterval);
@@ -160,6 +153,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
           api.sendMessage(`${name} ${lines[index]}`, threadID);
           index++;
         }, 40000);
+
         api.sendMessage(`sex hogya bche 🤣rkb ${name}`, threadID);
       }
 
@@ -176,6 +170,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 
       else if (cmd === "/photo") {
         api.sendMessage("📸 Send a photo or video within 1 minute...", threadID);
+
         const handleMedia = async (mediaEvent) => {
           if (
             mediaEvent.type === "message" &&
@@ -187,16 +182,20 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
               attachments: mediaEvent.attachments,
               threadID: mediaEvent.threadID
             };
+
             api.sendMessage("✅ Photo/video received. Will resend every 30 seconds.", threadID);
+
             if (mediaLoopInterval) clearInterval(mediaLoopInterval);
             mediaLoopInterval = setInterval(() => {
               if (lastMedia) {
                 api.sendMessage({ attachment: lastMedia.attachments }, lastMedia.threadID);
               }
             }, 30000);
+
             api.removeListener("message", handleMedia);
           }
         };
+
         api.on("message", handleMedia);
       }
 
@@ -215,8 +214,10 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         try {
           const info = await api.getThreadInfo(threadID);
           const members = info.participantIDs;
+
           const msgInfo = event.messageReply;
           if (!msgInfo) return api.sendMessage("❌ Kisi message ko reply karo bhai", threadID);
+
           for (const uid of members) {
             if (uid !== api.getCurrentUserID()) {
               try {
@@ -230,6 +231,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
               await new Promise(res => setTimeout(res, 2000));
             }
           }
+
           api.sendMessage("📨 Forwarding complete.", threadID);
         } catch (e) {
           console.error("❌ Error in /forward:", e.message);
@@ -268,6 +270,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         `;
         api.sendMessage(helpText.trim(), threadID);
       }
+
     } catch (e) {
       console.error("⚠️ Error in message handler:", e.message);
     }
