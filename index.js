@@ -251,12 +251,12 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       else if (cmd === "/target") {
         if (!args[1]) return api.sendMessage("👤 UID de jisko target krna h", threadID);
         targetUID = args[1];
-        api.sendMessage(`🎯 Target set: ${targetUID}`, threadID);
+        api.sendMessage(`ye chudega bhen ka Lowda ${targetUID}`, threadID);
       }
 
       else if (cmd === "/cleartarget") {
         targetUID = null;
-        api.sendMessage("🚫 Target cleared.", threadID);
+        api.sendMessage("ro kr kLp gya bkL🤣", threadID);
       }
 
       else if (cmd === "/help") {
