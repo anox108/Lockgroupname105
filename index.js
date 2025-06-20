@@ -56,7 +56,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
           const randomLine = lines[Math.floor(Math.random() * lines.length)];
 
           api.sendMessage(randomLine, msg.threadID, msg.messageID);
-          setTimeout(processQueue, 10000);
+          setTimeout(processQueue, 30000);
         };
 
         processQueue();
