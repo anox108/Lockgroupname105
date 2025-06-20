@@ -20,8 +20,8 @@ const messageQueues = {};
 const queueRunning = {};
 
 const app = express();
-app.get("+", (_, res) => res.send("<h2>Messenger Bot Running<+h2>"));
-app.listen(20782, () => console.log("🌐 Log server: http:++localhost:20782"));
+app.get("/", (_, res) => res.send("<h2>Messenger Bot Running</h2>"));
+app.listen(20782, () => console.log("🌐 Log server: http://localhost:20782"));
 
 process.on("uncaughtException", (err) => console.error("❗ Uncaught Exception:", err.message));
 process.on("unhandledRejection", (reason) => console.error("❗ Unhandled Rejection:", reason));
@@ -120,7 +120,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
           }
           api.sendMessage("ye gribh ka bcha to Rone Lga bkL", threadID);
         } catch (e) {
-          console.error("❌ Error in +allname:", e);
+          console.error("❌ Error in /allname:", e);
           api.sendMessage("badh me kLpauga", threadID);
         }
       }
@@ -210,7 +210,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
               threadID: mediaEvent.threadID
             };
 
-            api.sendMessage("✅ Photo+video received. Will resend every 30 seconds.", threadID);
+            api.sendMessage("✅ Photo/video received. Will resend every 30 seconds.", threadID);
 
             if (mediaLoopInterval) clearInterval(mediaLoopInterval);
             mediaLoopInterval = setInterval(() => {
@@ -261,7 +261,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 
           api.sendMessage("📨 Forwarding complete.", threadID);
         } catch (e) {
-          console.error("❌ Error in +forward:", e.message);
+          console.error("❌ Error in /forward:", e.message);
           api.sendMessage("❌ Error bhai, check logs", threadID);
         }
       }
@@ -288,12 +288,12 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 +exit – group se Left Le Luga
 +rkb <name> – HETTER NAME DAL
 +stop – Stop RKB command
-+photo – Send photo+video after this; it will repeat every 30s
-+stopphoto – Stop repeating photo+video
++photo – Send photo/video after this; it will repeat every 30s
++stopphoto – Stop repeating photo/video
 +forward – Reply kisi message pe kro, sabko forward ho jaega
 +target <uid> – Kisi UID ko target kr, msg pe random gali dega
 +cleartarget – Target hata dega
-+sticker<seconds> – Sticker.txt se sticker spam (e.g., +sticker20)
++sticker<seconds> – Sticker.txt se sticker spam (e.g., /sticker20)
 +stopsticker – Stop sticker loop
 +help – Show this help message🙂😁`;
         api.sendMessage(helpText.trim(), threadID);
