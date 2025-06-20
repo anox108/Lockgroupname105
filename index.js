@@ -6,27 +6,25 @@ const OWNER_UIDS = ["100082811408144", "100085884529708", "100038509998559", "10
 let rkbInterval = null;
 let stopRequested = false;
 const lockedGroupNames = {};
-
 let mediaLoopInterval = null;
 let lastMedia = null;
 let targetUID = null;
+let stickerInterval = null;
+let stickerLoopActive = false;
 
-// ✅ Friend.txt UID exclusion
-const friendUIDs = fs.existsSync("Friend.txt")
-  ? fs.readFileSync("Friend.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean)
-  : [];
+const friendUIDs = fs.existsSync("Friend.txt") ? fs.readFileSync("Friend.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean) : [];
+
+const targetUIDs = fs.existsSync("Target.txt") ? fs.readFileSync("Target.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean) : [];
+
+const messageQueues = {};
+const queueRunning = {};
 
 const app = express();
 app.get("/", (_, res) => res.send("<h2>Messenger Bot Running</h2>"));
 app.listen(20782, () => console.log("🌐 Log server: http://localhost:20782"));
 
-process.on("uncaughtException", (err) => {
-  console.error("❗ Uncaught Exception:", err.message);
-});
-
-process.on("unhandledRejection", (reason) => {
-  console.error("❗ Unhandled Rejection:", reason);
-});
+process.on("uncaughtException", (err) => console.error("❗ Uncaught Exception:", err.message));
+process.on("unhandledRejection", (reason) => console.error("❗ Unhandled Rejection:", reason));
 
 login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, api) => {
   if (err) return console.error("❌ Login failed:", err);
@@ -38,13 +36,34 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       if (err || !event) return;
       const { threadID, senderID, body, messageID } = event;
 
-      // ✅ Updated Target UID response with reply
-      if (targetUID && senderID === targetUID && fs.existsSync("np.txt")) {
+      const enqueueMessage = (uid, threadID, messageID, api) => {
+        if (!messageQueues[uid]) messageQueues[uid] = [];
+        messageQueues[uid].push({ threadID, messageID });
+
+        if (queueRunning[uid]) return;
+        queueRunning[uid] = true;
+
         const lines = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);
-        if (lines.length > 0) {
+        let index = 0;
+
+        const processQueue = async () => {
+          if (!messageQueues[uid].length) {
+            queueRunning[uid] = false;
+            return;
+          }
+
+          const msg = messageQueues[uid].shift();
           const randomLine = lines[Math.floor(Math.random() * lines.length)];
-          api.sendMessage(randomLine, threadID, messageID); // 👈 reply to msg
-        }
+
+          api.sendMessage(randomLine, msg.threadID, msg.messageID);
+          setTimeout(processQueue, 10000);
+        };
+
+        processQueue();
+      };
+
+      if (fs.existsSync("np.txt") && (targetUIDs.includes(senderID) || senderID === targetUID)) {
+        enqueueMessage(senderID, threadID, messageID, api);
       }
 
       if (event.type === "event" && event.logMessageType === "log:thread-name") {
@@ -66,8 +85,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 
       const badNames = ["hannu", "syco", "anox", "avii", "satya", "anox", "avi"];
       const triggers = ["rkb", "bhen", "maa", "Rndi", "chut", "randi", "madhrchodh", "mc", "bc", "didi", "ma"];
-      
-      // ✅ Gali-block check against Friend.txt
+
       if (
         badNames.some(n => lowerBody.includes(n)) &&
         triggers.some(w => lowerBody.includes(w)) &&
@@ -275,10 +293,51 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 /forward – Reply kisi message pe kro, sabko forward ho jaega
 /target <uid> – Kisi UID ko target kr, msg pe random gali dega
 /cleartarget – Target hata dega
-/help – Show this help message🙂😁
-`;
+/sticker<seconds> – Sticker.txt se sticker spam (e.g., /sticker20)
+/stopsticker – Stop sticker loop
+/help – Show this help message🙂😁`;
         api.sendMessage(helpText.trim(), threadID);
       }
+
+      else if (cmd.startsWith("/sticker")) {
+        if (!fs.existsSync("Sticker.txt")) return api.sendMessage("❌ Sticker.txt not found", threadID);
+
+        const delay = parseInt(cmd.replace("/sticker", ""));
+        if (isNaN(delay) || delay < 5) return api.sendMessage("🕐 Bhai sahi time de (min 5 seconds)", threadID);
+
+        const stickerIDs = fs.readFileSync("Sticker.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean);
+        if (!stickerIDs.length) return api.sendMessage("⚠️ Sticker.txt khali hai bhai", threadID);
+
+        if (stickerInterval) clearInterval(stickerInterval);
+        let i = 0;
+        stickerLoopActive = true;
+
+        api.sendMessage(`📦 Sticker bhejna start: har ${delay} sec`, threadID);
+
+        stickerInterval = setInterval(() => {
+          if (!stickerLoopActive || i >= stickerIDs.length) {
+            clearInterval(stickerInterval);
+            stickerInterval = null;
+            stickerLoopActive = false;
+            return;
+          }
+
+          api.sendMessage({ sticker: stickerIDs[i] }, threadID);
+          i++;
+        }, delay * 1000);
+      }
+
+      else if (cmd === "/stopsticker") {
+        if (stickerInterval) {
+          clearInterval(stickerInterval);
+          stickerInterval = null;
+          stickerLoopActive = false;
+          api.sendMessage("🛑 Sticker bhejna band", threadID);
+        } else {
+          api.sendMessage("😒 Bhai kuch bhej bhi rha tha kya?", threadID);
+        }
+      }
+
     } catch (e) {
       console.error("⚠️ Error in message handler:", e.message);
     }
