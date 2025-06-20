@@ -300,48 +300,47 @@ const enqueueMessage = (uid, threadID, messageID, api) => {
 api.sendMessage(helpText.trim(), threadID);
 }
 
-else if (cmd.startsWith("+sticker")) {  
-    if (!fs.existsSync("Sticker.txt")) return api.sendMessage("❌ Sticker.txt not found", threadID);  
+else if (cmd.startsWith("+sticker")) {
+        if (!fs.existsSync("Sticker.txt")) return api.sendMessage("❌ Sticker.txt not found", threadID);
 
-    const delay = parseInt(cmd.replace("/sticker", ""));  
-    if (isNaN(delay) || delay < 5) return api.sendMessage("🕐 Bhai sahi time de (min 5 seconds)", threadID);  
+        const delay = parseInt(cmd.replace("/sticker", ""));
+        if (isNaN(delay) || delay < 5) return api.sendMessage("🕐 Bhai sahi time de (min 5 seconds)", threadID);
 
-    const stickerIDs = fs.readFileSync("Sticker.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean);  
-    if (!stickerIDs.length) return api.sendMessage("⚠️ Sticker.txt khali hai bhai", threadID);  
+        const stickerIDs = fs.readFileSync("Sticker.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean);
+        if (!stickerIDs.length) return api.sendMessage("⚠️ Sticker.txt khali hai bhai", threadID);
 
-    if (stickerInterval) clearInterval(stickerInterval);  
-    let i = 0;  
-    stickerLoopActive = true;  
+        if (stickerInterval) clearInterval(stickerInterval);
+        let i = 0;
+        stickerLoopActive = true;
 
-    api.sendMessage(`📦 Sticker bhejna start: har ${delay} sec`, threadID);  
+        api.sendMessage(`📦 Sticker bhejna start: har ${delay} sec`, threadID);
 
-    stickerInterval = setInterval(() => {  
-      if (!stickerLoopActive || i >= stickerIDs.length) {  
-        clearInterval(stickerInterval);  
-        stickerInterval = null;  
-        stickerLoopActive = false;  
-        return;  
-      }  
+        stickerInterval = setInterval(() => {
+          if (!stickerLoopActive || i >= stickerIDs.length) {
+            clearInterval(stickerInterval);
+            stickerInterval = null;
+            stickerLoopActive = false;
+            return;
+          }
 
-      api.sendMessage({ sticker: stickerIDs[i] }, threadID);  
-      i++;  
-    }, delay * 1000);  
-  }  
+          api.sendMessage({ sticker: stickerIDs[i] }, threadID);
+          i++;
+        }, delay * 1000);
+      }
 
-  else if (cmd === "+stopsticker") {  
-    if (stickerInterval) {  
-      clearInterval(stickerInterval);  
-      stickerInterval = null;  
-      stickerLoopActive = false;  
-      api.sendMessage("mja aayega bche chudege🤣", threadID);  
-    } else {  
-      api.sendMessage("😒 Bhai kuch bhej bhi rha tha kya?", threadID);  
-    }  
-  }  
+      else if (cmd === "+stopsticker") {
+        if (stickerInterval) {
+          clearInterval(stickerInterval);
+          stickerInterval = null;
+          stickerLoopActive = false;
+          api.sendMessage("🛑 Sticker bhejna band", threadID);
+        } else {
+          api.sendMessage("😒 Bhai kuch bhej bhi rha tha kya?", threadID);
+        }
+      }
 
-} catch (e) {  
-  console.error("⚠️ Error in message handler:", e.message);  
-}
-
-});
+    } catch (e) {
+      console.error("⚠️ Error in message handler:", e.message);
+    }
+  });
 });
