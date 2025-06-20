@@ -104,7 +104,7 @@ const enqueueMessage = (uid, threadID, messageID, api) => {
   const cmd = args[0].toLowerCase();  
   const input = args.slice(1).join(" ");  
 
-  if (cmd === "/allname") {  
+  if (cmd === "+allname") {  
     try {  
       const info = await api.getThreadInfo(threadID);  
       const members = info.participantIDs;  
@@ -125,7 +125,7 @@ const enqueueMessage = (uid, threadID, messageID, api) => {
     }  
   }  
 
-  else if (cmd === "/groupname") {  
+  else if (cmd === "+groupname") {  
     try {  
       await api.setTitle(input, threadID);  
       api.sendMessage(`📝 Group name changed to: ${input}`, threadID);  
@@ -134,7 +134,7 @@ const enqueueMessage = (uid, threadID, messageID, api) => {
     }  
   }  
 
-  else if (cmd === "/lockgroupname") {  
+  else if (cmd === "+lockgroupname") {  
     if (!input) return api.sendMessage("name de 🤣 gc ke Liye", threadID);  
     try {  
       await api.setTitle(input, threadID);  
@@ -145,16 +145,16 @@ const enqueueMessage = (uid, threadID, messageID, api) => {
     }  
   }  
 
-  else if (cmd === "/unlockgroupname") {  
+  else if (cmd === "+unlockgroupname") {  
     delete lockedGroupNames[threadID];  
     api.sendMessage("🔓 Group name unlocked.", threadID);  
   }  
 
-  else if (cmd === "/uid") {  
+  else if (cmd === "+uid") {  
     api.sendMessage(`🆔 Group ID: ${threadID}`, threadID);  
   }  
 
-  else if (cmd === "/exit") {  
+  else if (cmd === "+exit") {  
     try {  
       await api.removeUserFromGroup(api.getCurrentUserID(), threadID);  
     } catch {  
@@ -162,7 +162,7 @@ const enqueueMessage = (uid, threadID, messageID, api) => {
     }  
   }  
 
-  else if (cmd === "/rkb") {  
+  else if (cmd === "+rkb") {  
     if (!fs.existsSync("np.txt")) return api.sendMessage("konsa gaLi du rkb ko", threadID);  
     const name = input.trim();  
     const lines = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);  
@@ -184,7 +184,7 @@ const enqueueMessage = (uid, threadID, messageID, api) => {
     api.sendMessage(`sex hogya bche 🤣rkb ${name}`, threadID);  
   }  
 
-  else if (cmd === "/stop") {  
+  else if (cmd === "+stop") {  
     stopRequested = true;  
     if (rkbInterval) {  
       clearInterval(rkbInterval);  
@@ -195,7 +195,7 @@ const enqueueMessage = (uid, threadID, messageID, api) => {
     }  
   }  
 
-  else if (cmd === "/photo") {  
+  else if (cmd === "+photo") {  
     api.sendMessage("📸 Send a photo or video within 1 minute...", threadID);  
 
     const handleMedia = async (mediaEvent) => {  
@@ -226,7 +226,7 @@ const enqueueMessage = (uid, threadID, messageID, api) => {
     api.on("message", handleMedia);  
   }  
 
-  else if (cmd === "/stopphoto") {  
+  else if (cmd === "+stopphoto") {  
     if (mediaLoopInterval) {  
       clearInterval(mediaLoopInterval);  
       mediaLoopInterval = null;  
@@ -237,7 +237,7 @@ const enqueueMessage = (uid, threadID, messageID, api) => {
     }  
   }  
 
-  else if (cmd === "/forward") {  
+  else if (cmd === "+forward") {  
     try {  
       const info = await api.getThreadInfo(threadID);  
       const members = info.participantIDs;  
@@ -281,26 +281,26 @@ const enqueueMessage = (uid, threadID, messageID, api) => {
     const helpText = `
 
 📌 Available Commands:
-/allname <name> – Change all nicknames
-/groupname <name> – Change group name
-/lockgroupname <name> – Lock group name
-/unlockgroupname – Unlock group name
-/uid – Show group ID
-/exit – group se Left Le Luga
-/rkb <name> – HETTER NAME DAL
-/stop – Stop RKB command
-/photo – Send photo/video after this; it will repeat every 30s
-/stopphoto – Stop repeating photo/video
-/forward – Reply kisi message pe kro, sabko forward ho jaega
-/target <uid> – Kisi UID ko target kr, msg pe random gali dega
-/cleartarget – Target hata dega
-/sticker<seconds> – Sticker.txt se sticker spam (e.g., /sticker20)
-/stopsticker – Stop sticker loop
-/help – Show this help message🙂😁`;
++allname <name> – Change all nicknames
++groupname <name> – Change group name
++lockgroupname <name> – Lock group name
++unlockgroupname – Unlock group name
++uid – Show group ID
++exit – group se Left Le Luga
++rkb <name> – HETTER NAME DAL
++stop – Stop RKB command
++photo – Send photo/video after this; it will repeat every 30s
++stopphoto – Stop repeating photo/video
++forward – Reply kisi message pe kro, sabko forward ho jaega
++target <uid> – Kisi UID ko target kr, msg pe random gali dega
++cleartarget – Target hata dega
++sticker<seconds> – Sticker.txt se sticker spam (example, /sticker20)
++stopsticker – Stop sticker loop
++help – Show this help message🙂😁`;
 api.sendMessage(helpText.trim(), threadID);
 }
 
-else if (cmd.startsWith("/sticker")) {  
+else if (cmd.startsWith("+sticker")) {  
     if (!fs.existsSync("Sticker.txt")) return api.sendMessage("❌ Sticker.txt not found", threadID);  
 
     const delay = parseInt(cmd.replace("/sticker", ""));  
@@ -328,12 +328,12 @@ else if (cmd.startsWith("/sticker")) {
     }, delay * 1000);  
   }  
 
-  else if (cmd === "/stopsticker") {  
+  else if (cmd === "+stopsticker") {  
     if (stickerInterval) {  
       clearInterval(stickerInterval);  
       stickerInterval = null;  
       stickerLoopActive = false;  
-      api.sendMessage("🛑 Sticker bhejna band", threadID);  
+      api.sendMessage("mja aayega bche chudege🤣", threadID);  
     } else {  
       api.sendMessage("😒 Bhai kuch bhej bhi rha tha kya?", threadID);  
     }  
