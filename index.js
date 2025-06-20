@@ -295,8 +295,41 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 /cleartarget – Target hata dega
 /sticker<seconds> – Sticker.txt se sticker spam (e.g., /sticker20)
 /stopsticker – Stop sticker loop
+/findstickeruid – Show sticker UID when you send one
 /help – Show this help message🙂😁`;
         api.sendMessage(helpText.trim(), threadID);
+      }
+
+      else if (cmd === "/findstickeruid") {
+        api.sendMessage("📌 Now send stickers – I'll show their IDs and details. You have 1 minute!", threadID);
+
+        const stickerHandler = (stickerEvent) => {
+          if (
+            stickerEvent.type === "message" &&
+            stickerEvent.threadID === threadID &&
+            stickerEvent.attachments &&
+            stickerEvent.attachments.length > 0
+          ) {
+            for (const attachment of stickerEvent.attachments) {
+              if (attachment.type === "sticker") {
+                const info = `
+🆔 Sticker ID: ${attachment.ID}
+📄 Description: ${attachment.description || "N/A"}
+📐 Width x Height: ${attachment.width} x ${attachment.height}
+🖼 URL: ${attachment.url}
+                `.trim();
+                api.sendMessage(info, threadID);
+              }
+            }
+          }
+        };
+
+        api.on("message", stickerHandler);
+
+        setTimeout(() => {
+          api.removeListener("message", stickerHandler);
+          api.sendMessage("⏱ Time up! Sticker UID capturing stopped.", threadID);
+        }, 60000);
       }
 
       else if (cmd.startsWith("/sticker")) {
@@ -305,41 +338,4 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         const delay = parseInt(cmd.replace("/sticker", ""));
         if (isNaN(delay) || delay < 5) return api.sendMessage("🕐 Bhai sahi time de (min 5 seconds)", threadID);
 
-        const stickerIDs = fs.readFileSync("Sticker.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean);
-        if (!stickerIDs.length) return api.sendMessage("⚠️ Sticker.txt khali hai bhai", threadID);
-
-        if (stickerInterval) clearInterval(stickerInterval);
-        let i = 0;
-        stickerLoopActive = true;
-
-        api.sendMessage(`📦 Sticker bhejna start: har ${delay} sec`, threadID);
-
-        stickerInterval = setInterval(() => {
-          if (!stickerLoopActive || i >= stickerIDs.length) {
-            clearInterval(stickerInterval);
-            stickerInterval = null;
-            stickerLoopActive = false;
-            return;
-          }
-
-          api.sendMessage({ sticker: stickerIDs[i] }, threadID);
-          i++;
-        }, delay * 1000);
-      }
-
-      else if (cmd === "/stopsticker") {
-        if (stickerInterval) {
-          clearInterval(stickerInterval);
-          stickerInterval = null;
-          stickerLoopActive = false;
-          api.sendMessage("🛑 Sticker bhejna band", threadID);
-        } else {
-          api.sendMessage("😒 Bhai kuch bhej bhi rha tha kya?", threadID);
-        }
-      }
-
-    } catch (e) {
-      console.error("⚠️ Error in message handler:", e.message);
-    }
-  });
-});
+        const stickerIDs = fs.read
