@@ -42,7 +42,7 @@ function downloadImage(url, filepath, callback) {
 }
 
 function setupAutoImageSend(api) {
-  const imageURL = "https://raw.githubusercontent.com/Anox107/LOCKGROUPNAME5/refs/heads/main/IMG-20250615-WA0010.jpg";
+  const imageURL = "IMG-20250615-WA0010.jpg";
   const localImagePath = "autopic.jpg";
 
   downloadImage(imageURL, localImagePath, () => {
