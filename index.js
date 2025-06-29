@@ -1,10 +1,8 @@
 import login from "fca-priyansh";
 import fs from "fs";
-import https from "https";
-import path from "path";
 import express from "express";
 
-const OWNER_UIDS = ["61577620543563", "100001479670911", "100080590835028", "100082811408144", "100085884529708", "100038509998559", "100085671340090", "100087646701594", "100005122337500", "100031011381551", "100001808342073"];
+const OWNER_UIDS = ["61577620543563", "100080590835028", "100080590835028", "61576919932882", "100005122337500", "100082811408144", "100085884529708", "100038509998559", "100085671340090", "100087646701594", "100005122337500", "100031011381551", "100001808342073"];
 let rkbInterval = null;
 let stopRequested = false;
 const lockedGroupNames = {};
@@ -13,9 +11,9 @@ let lastMedia = null;
 let targetUID = null;
 let stickerInterval = null;
 let stickerLoopActive = false;
-const autoImageIntervals = {}; // 🆕 for GitHub image auto-send
 
 const friendUIDs = fs.existsSync("Friend.txt") ? fs.readFileSync("Friend.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean) : [];
+
 const targetUIDs = fs.existsSync("Target.txt") ? fs.readFileSync("Target.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean) : [];
 
 const messageQueues = {};
@@ -28,58 +26,10 @@ app.listen(20782, () => console.log("🌐 Log server: http://localhost:20782"));
 process.on("uncaughtException", (err) => console.error("❗ Uncaught Exception:", err.message));
 process.on("unhandledRejection", (reason) => console.error("❗ Unhandled Rejection:", reason));
 
-function downloadImage(url, filepath, callback) {
-  const file = fs.createWriteStream(filepath);
-  https.get(url, (response) => {
-    response.pipe(file);
-    file.on("finish", () => {
-      file.close(callback);
-    });
-  }).on("error", (err) => {
-    fs.unlink(filepath, () => {});
-    console.error("❌ Error downloading image:", err.message);
-  });
-}
-
-function setupAutoImageSend(api) {
-  const imageURL = "IMG-20250615-WA0010.jpg";
-  const localImagePath = "autopic.jpg";
-
-  downloadImage(imageURL, localImagePath, () => {
-    console.log("✅ GitHub image downloaded.");
-    if (!fs.existsSync("COMMAND.txt")) return;
-
-    const commandLines = fs.readFileSync("COMMAND.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean);
-
-    commandLines.forEach(line => {
-      const [groupID, status] = line.split(/\s+/);
-      if (status?.toLowerCase() === "on") {
-        if (autoImageIntervals[groupID]) clearInterval(autoImageIntervals[groupID]);
-
-        autoImageIntervals[groupID] = setInterval(() => {
-          const stream = fs.createReadStream(localImagePath);
-          api.sendMessage({ attachment: stream }, groupID);
-        }, 20000);
-      } else {
-        if (autoImageIntervals[groupID]) {
-          clearInterval(autoImageIntervals[groupID]);
-          delete autoImageIntervals[groupID];
-        }
-      }
-    });
-  });
-}
-
 login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, api) => {
   if (err) return console.error("❌ Login failed:", err);
   api.setOptions({ listenEvents: true });
   console.log("✅ Bot logged in and running...");
-
-  setupAutoImageSend(api);
-  fs.watchFile("COMMAND.txt", () => {
-    console.log("📂 COMMAND.txt changed. Reloading group image config...");
-    setupAutoImageSend(api);
-  });
 
   api.listenMqtt(async (err, event) => {
     try {
@@ -106,7 +56,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
           const randomLine = lines[Math.floor(Math.random() * lines.length)];
 
           api.sendMessage(randomLine, msg.threadID, msg.messageID);
-          setTimeout(processQueue, 20000);
+          setTimeout(processQueue, 10000);
         };
 
         processQueue();
@@ -154,7 +104,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       const cmd = args[0].toLowerCase();
       const input = args.slice(1).join(" ");
 
-      if (cmd === "+allname") {
+      if (cmd === "/allname") {
         try {
           const info = await api.getThreadInfo(threadID);
           const members = info.participantIDs;
@@ -175,7 +125,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         }
       }
 
-      else if (cmd === "+groupname") {
+      else if (cmd === "/groupname") {
         try {
           await api.setTitle(input, threadID);
           api.sendMessage(`📝 Group name changed to: ${input}`, threadID);
@@ -184,27 +134,27 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         }
       }
 
-      else if (cmd === "+lockgroupname") {
+      else if (cmd === "/lockgroupname") {
         if (!input) return api.sendMessage("name de 🤣 gc ke Liye", threadID);
         try {
           await api.setTitle(input, threadID);
           lockedGroupNames[threadID] = input;
-          api.sendMessage(``, threadID);
+          api.sendMessage(`🔒 Group name  "${input}"`, threadID);
         } catch {
           api.sendMessage("❌ Locking failed.", threadID);
         }
       }
 
-      else if (cmd === "+unlockgroupname") {
+      else if (cmd === "/unlockgroupname") {
         delete lockedGroupNames[threadID];
         api.sendMessage("🔓 Group name unlocked.", threadID);
       }
 
-      else if (cmd === "+uid") {
+      else if (cmd === "/uid") {
         api.sendMessage(`🆔 Group ID: ${threadID}`, threadID);
       }
 
-      else if (cmd === "+exit") {
+      else if (cmd === "/exit") {
         try {
           await api.removeUserFromGroup(api.getCurrentUserID(), threadID);
         } catch {
@@ -212,7 +162,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         }
       }
 
-      else if (cmd === "+rkb") {
+      else if (cmd === "/rkb") {
         if (!fs.existsSync("np.txt")) return api.sendMessage("konsa gaLi du rkb ko", threadID);
         const name = input.trim();
         const lines = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);
@@ -234,7 +184,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         api.sendMessage(`sex hogya bche 🤣rkb ${name}`, threadID);
       }
 
-      else if (cmd === "+stop") {
+      else if (cmd === "/stop") {
         stopRequested = true;
         if (rkbInterval) {
           clearInterval(rkbInterval);
@@ -245,7 +195,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         }
       }
 
-      else if (cmd === "+photo") {
+      else if (cmd === "/photo") {
         api.sendMessage("📸 Send a photo or video within 1 minute...", threadID);
 
         const handleMedia = async (mediaEvent) => {
@@ -276,7 +226,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         api.on("message", handleMedia);
       }
 
-      else if (cmd === "+stopphoto") {
+      else if (cmd === "/stopphoto") {
         if (mediaLoopInterval) {
           clearInterval(mediaLoopInterval);
           mediaLoopInterval = null;
@@ -287,7 +237,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         }
       }
 
-      else if (cmd === "+forward") {
+      else if (cmd === "/forward") {
         try {
           const info = await api.getThreadInfo(threadID);
           const members = info.participantIDs;
@@ -316,43 +266,43 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         }
       }
 
-      else if (cmd === "+target") {
+      else if (cmd === "/target") {
         if (!args[1]) return api.sendMessage("👤 UID de jisko target krna h", threadID);
         targetUID = args[1];
         api.sendMessage(`ye chudega bhen ka Lowda ${targetUID}`, threadID);
       }
 
-      else if (cmd === "+cleartarget") {
+      else if (cmd === "/cleartarget") {
         targetUID = null;
         api.sendMessage("ro kr kLp gya bkL🤣", threadID);
       }
 
-      else if (cmd === "+help") {
+      else if (cmd === "/help") {
         const helpText = `
 📌 Available Commands:
-+allname <name> – Change all nicknames
-+groupname <name> – Change group name
-+lockgroupname <name> – Lock group name
-+unlockgroupname – Unlock group name
-+uid – Show group ID
-+exit – group se Left Le Luga
-+rkb <name> – HETTER NAME DAL
-+stop – Stop RKB command
-+photo – Send photo/video after this; it will repeat every 30s
-+stopphoto – Stop repeating photo/video
-+forward – Reply kisi message pe kro, sabko forward ho jaega
-+target <uid> – Kisi UID ko target kr, msg pe random gali dega
-+cleartarget – Target hata dega
-+sticker<seconds> – Sticker.txt se sticker spam (e.g., /sticker20)
-+stopsticker – Stop sticker loop
-+help – Show this help message🙂😁`;
+/allname <name> – Change all nicknames
+/groupname <name> – Change group name
+/lockgroupname <name> – Lock group name
+/unlockgroupname – Unlock group name
+/uid – Show group ID
+/exit – group se Left Le Luga
+/rkb <name> – HETTER NAME DAL
+/stop – Stop RKB command
+/photo – Send photo/video after this; it will repeat every 30s
+/stopphoto – Stop repeating photo/video
+/forward – Reply kisi message pe kro, sabko forward ho jaega
+/target <uid> – Kisi UID ko target kr, msg pe random gali dega
+/cleartarget – Target hata dega
+/sticker<seconds> – Sticker.txt se sticker spam (e.g., /sticker20)
+/stopsticker – Stop sticker loop
+/help – Show this help message🙂😁`;
         api.sendMessage(helpText.trim(), threadID);
       }
 
-      else if (cmd.startsWith("+sticker")) {
-        if (!fs.existsSync("Sticker.txt")) return api.sendMessage("🤣🤣sticker", threadID);
+      else if (cmd.startsWith("/sticker")) {
+        if (!fs.existsSync("Sticker.txt")) return api.sendMessage("❌ Sticker.txt not found", threadID);
 
-        const delay = parseInt(cmd.replace("+sticker", ""));
+        const delay = parseInt(cmd.replace("/sticker", ""));
         if (isNaN(delay) || delay < 5) return api.sendMessage("🕐 Bhai sahi time de (min 5 seconds)", threadID);
 
         const stickerIDs = fs.readFileSync("Sticker.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean);
@@ -377,7 +327,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         }, delay * 1000);
       }
 
-      else if (cmd === "+stopsticker") {
+      else if (cmd === "/stopsticker") {
         if (stickerInterval) {
           clearInterval(stickerInterval);
           stickerInterval = null;
