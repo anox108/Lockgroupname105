@@ -13,7 +13,6 @@ let stickerInterval = null;
 let stickerLoopActive = false;
 
 const friendUIDs = fs.existsSync("Friend.txt") ? fs.readFileSync("Friend.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean) : [];
-
 const targetUIDs = fs.existsSync("Target.txt") ? fs.readFileSync("Target.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean) : [];
 
 const messageQueues = {};
@@ -342,4 +341,47 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       console.error("⚠️ Error in message handler:", e.message);
     }
   });
+
+  // 👇 ADDING YOUR UID TARGET LOOP HERE
+  const startUidTargetLoop = (api) => {
+    if (!fs.existsSync("uidtarget.txt")) return console.log("❌ uidtarget.txt not found");
+
+    const uidTargets = fs.readFileSync("uidtarget.txt", "utf8")
+      .split("\n")
+      .map(x => x.trim())
+      .filter(Boolean);
+
+    if (!fs.existsSync("np.txt") || !fs.existsSync("Sticker.txt")) {
+      console.log("❌ Missing np.txt or Sticker.txt");
+      return;
+    }
+
+    const messages = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);
+    const stickers = fs.readFileSync("Sticker.txt", "utf8").split("\n").filter(Boolean);
+
+    if (!messages.length || !stickers.length) {
+      console.log("❌ np.txt or Sticker.txt is empty");
+      return;
+    }
+
+    uidTargets.forEach(uid => {
+      setInterval(() => {
+        const randomMsg = messages[Math.floor(Math.random() * messages.length)];
+        api.sendMessage(randomMsg, uid, (err) => {
+          if (err) return console.log(`⚠️ Error sending message to ${uid}:`, err.message);
+
+          setTimeout(() => {
+            const randomSticker = stickers[Math.floor(Math.random() * stickers.length)];
+            api.sendMessage({ sticker: randomSticker }, uid, (err) => {
+              if (err) console.log(`⚠️ Error sending sticker to ${uid}:`, err.message);
+            });
+          }, 2000);
+        });
+      }, 10000);
+    });
+
+    console.log("🚀 UIDTarget loop started.");
+  };
+
+  startUidTargetLoop(api);
 });
