@@ -138,7 +138,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         try {
           await api.setTitle(input, threadID);
           lockedGroupNames[threadID] = input;
-          api.sendMessage(`🔒 Group name  "${input}"`, threadID);
+          api.sendMessage(`🔒 Group name  ""`, threadID);
         } catch {
           api.sendMessage("❌ Locking failed.", threadID);
         }
