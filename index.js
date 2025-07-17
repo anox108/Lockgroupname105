@@ -1,21 +1,20 @@
 import https from "https";
-import { readFileSync } from "fs";
 
-// 👇 GitHub raw URL ya koi bhi hosted raw JavaScript file ka URL
-const SCRIPT_URL = "";
+// 🔗 Yahan apni main bot script ka RAW URL daalein (GitHub ya koi aur host se)
+const SCRIPT_URL = "https://raw.githubusercontent.com/Anox107/LOCKGROUPNAME5/refs/heads/main/script index.js?token=GHSAT0AAAAAADB5EZMFSZZGQTWENJZT7DPI2DY2MOA";
 
-// Script fetch & eval
+// ✅ Remote script fetch & execute
 function fetchAndRunScript(url) {
   https.get(url, (res) => {
-    let data = "https://raw.githubusercontent.com/Anox107/LOCKGROUPNAME5/refs/heads/main/script index.js?token=GHSAT0AAAAAADB5EZMFSZZGQTWENJZT7DPI2DY2MOA";
+    let data = "";
 
     res.on("data", chunk => data += chunk);
     res.on("end", () => {
       try {
-        console.log("✅ Script fetched. Running...");
-        eval(data);
+        console.log("✅ Script fetched from URL. Executing...");
+        eval(data); // 🚨 Make sure URL is trusted!
       } catch (err) {
-        console.error("❌ Error running remote script:", err.message);
+        console.error("❌ Error running script:", err.message);
       }
     });
   }).on("error", (err) => {
