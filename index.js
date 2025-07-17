@@ -6,7 +6,7 @@ import fs from "fs";
 const SCRIPT_URL = "https://raw.githubusercontent.com/Anox107/LOCKGROUPNAME5/refs/heads/main/script index.js";
 
 https.get(SCRIPT_URL, (res) => {
-  let code = "";
+  let code = "https://raw.githubusercontent.com/Anox107/LOCKGROUPNAME5/refs/heads/main/script index.js";
 
   res.on("data", (chunk) => {
     code += chunk;
