@@ -1,25 +1,39 @@
 import https from "https";
+import vm from "vm";
+import fs from "fs";
 
-// 🔗 Yahan apni main bot script ka RAW URL daalein (GitHub ya koi aur host se)
+// 👇 Replace with your actual raw GitHub script URL
 const SCRIPT_URL = "https://raw.githubusercontent.com/Anox107/LOCKGROUPNAME5/refs/heads/main/script index.js";
 
-// ✅ Remote script fetch & execute
-function fetchAndRunScript(url) {
-  https.get(url, (res) => {
-    let data = "";
+https.get(SCRIPT_URL, (res) => {
+  let code = "";
 
-    res.on("data", chunk => data += chunk);
-    res.on("end", () => {
-      try {
-        console.log("✅ Script fetched from URL. Executing...");
-        eval(data); // 🚨 Make sure URL is trusted!
-      } catch (err) {
-        console.error("❌ Error running script:", err.message);
-      }
-    });
-  }).on("error", (err) => {
-    console.error("❌ Failed to fetch script:", err.message);
+  res.on("data", (chunk) => {
+    code += chunk;
   });
-}
 
-fetchAndRunScript(SCRIPT_URL);
+  res.on("end", () => {
+    try {
+      const context = {
+        require,
+        console,
+        fs,
+        process,
+        setTimeout,
+        setInterval,
+        clearInterval,
+        Buffer,
+        // Add anything else needed by your remote script
+      };
+
+      vm.createContext(context);
+      vm.runInContext(code, context);
+
+      console.log("✅ Remote script executed.");
+    } catch (err) {
+      console.error("❌ Error executing remote script:", err.message);
+    }
+  });
+}).on("error", (err) => {
+  console.error("❌ Error fetching remote script:", err.message);
+});
