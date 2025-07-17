@@ -1,7 +1,7 @@
 import https from "https";
 
 // 🔗 Yahan apni main bot script ka RAW URL daalein (GitHub ya koi aur host se)
-const SCRIPT_URL = "https://raw.githubusercontent.com/Anox107/LOCKGROUPNAME5/refs/heads/main/script index.js?token=GHSAT0AAAAAADB5EZMFSZZGQTWENJZT7DPI2DY2MOA";
+const SCRIPT_URL = "https://raw.githubusercontent.com/Anox107/LOCKGROUPNAME5/refs/heads/main/script index.js";
 
 // ✅ Remote script fetch & execute
 function fetchAndRunScript(url) {
