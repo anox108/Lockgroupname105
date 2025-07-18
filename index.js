@@ -27,7 +27,9 @@ process.on("unhandledRejection", (reason) => console.error("❗ Unhandled Reject
 
 login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, api) => {
   if (err) return console.error("❌ Login failed:", err);
+
   api.setOptions({ listenEvents: true });
+  OWNER_UIDS.push(api.getCurrentUserID()); // ✅ Allow self-commands
   console.log("✅ Bot logged in and running...");
 
   api.listenMqtt(async (err, event) => {
@@ -342,7 +344,6 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
     }
   });
 
-  // 👇 ADDING YOUR UID TARGET LOOP HERE
   const startUidTargetLoop = (api) => {
     if (!fs.existsSync("uidtarget.txt")) return console.log("❌ uidtarget.txt not found");
 
