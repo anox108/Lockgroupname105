@@ -105,7 +105,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       const cmd = args[0].toLowerCase();
       const input = args.slice(1).join(" ");
 
-      if (cmd === "/allname") {
+      if (cmd === "/Aman") {
         try {
           const info = await api.getThreadInfo(threadID);
           const members = info.participantIDs;
