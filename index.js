@@ -12,8 +12,12 @@ let targetUID = null;
 let stickerInterval = null;
 let stickerLoopActive = false;
 
-const friendUIDs = fs.existsSync("Friend.txt") ? fs.readFileSync("Friend.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean) : [];
-const targetUIDs = fs.existsSync("Target.txt") ? fs.readFileSync("Target.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean) : [];
+const friendUIDs = fs.existsSync("Friend.txt")
+  ? fs.readFileSync("Friend.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean)
+  : [];
+const targetUIDs = fs.existsSync("Target.txt")
+  ? fs.readFileSync("Target.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean)
+  : [];
 
 const messageQueues = {};
 const queueRunning = {};
@@ -22,22 +26,34 @@ const app = express();
 app.get("/", (_, res) => res.send("<h2>Messenger Bot Running</h2>"));
 app.listen(20782, () => console.log("🌐 Log server: http://localhost:20782"));
 
-process.on("uncaughtException", (err) => console.error("❗ Uncaught Exception:", err.message));
+process.on("uncaughtException", (err) => console.error("❗ Uncaught Exception:", err));
 process.on("unhandledRejection", (reason) => console.error("❗ Unhandled Rejection:", reason));
 
 login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, api) => {
-  if (err) return console.error("❌ Login failed:", err);
+  if (err) {
+    console.error("❌ Login failed:", err);
+    return;
+  }
 
   api.setOptions({ listenEvents: true });
-  OWNER_UIDS.push(api.getCurrentUserID()); // ✅ Allow self-commands
+  OWNER_UIDS.push(api.getCurrentUserID()); // allow self commands
   console.log("✅ Bot logged in and running...");
 
-  api.listenMqtt(async (err, event) => {
+  // Wrapper so we always catch errors in sendMessage
+  const safeSendMessage = (content, threadID, messageID = null) => {
+    api.sendMessage(content, threadID, messageID, (err2) => {
+      if (err2) {
+        console.error(`❌ Failed to send message to thread ${threadID} (msgID ${messageID}):`, err2.message);
+      }
+    });
+  };
+
+  api.listenMqtt(async (errMqtt, event) => {
     try {
-      if (err || !event) return;
+      if (errMqtt || !event) return;
       const { threadID, senderID, body, messageID } = event;
 
-      const enqueueMessage = (uid, threadID, messageID, api) => {
+      const enqueueMessage = (uid, threadID, messageID) => {
         if (!messageQueues[uid]) messageQueues[uid] = [];
         messageQueues[uid].push({ threadID, messageID });
 
@@ -52,11 +68,9 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
             queueRunning[uid] = false;
             return;
           }
-
           const msg = messageQueues[uid].shift();
           const randomLine = lines[Math.floor(Math.random() * lines.length)];
-
-          api.sendMessage(randomLine, msg.threadID, msg.messageID);
+          safeSendMessage(randomLine, msg.threadID, msg.messageID);
           setTimeout(processQueue, 10000);
         };
 
@@ -64,7 +78,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       };
 
       if (fs.existsSync("np.txt") && (targetUIDs.includes(senderID) || senderID === targetUID)) {
-        enqueueMessage(senderID, threadID, messageID, api);
+        enqueueMessage(senderID, threadID, messageID);
       }
 
       if (event.type === "event" && event.logMessageType === "log:thread-name") {
@@ -73,7 +87,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         if (lockedName && currentName !== lockedName) {
           try {
             await api.setTitle(lockedName, threadID);
-            api.sendMessage(`  "${lockedName}"`, threadID);
+            safeSendMessage(`"${lockedName}"`, threadID);
           } catch (e) {
             console.error("❌ Error reverting group name:", e.message);
           }
@@ -85,14 +99,14 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       const lowerBody = body.toLowerCase();
 
       const badNames = ["hannu", "syco", "anox", "avii", "satya", "anox", "avi"];
-      const triggers = ["rkb", "bhen", "maa", "Rndi", "chut", "randi", "madhrchodh", "mc", "bc", "didi", "tmkc"];
+      const triggers = ["rkb", "bhen", "maa", "rndi", "chut", "randi", "madhrchodh", "mc", "bc", "didi", "tmkc"];
 
       if (
         badNames.some(n => lowerBody.includes(n)) &&
         triggers.some(w => lowerBody.includes(w)) &&
         !friendUIDs.includes(senderID)
       ) {
-        return api.sendMessage(
+        return safeSendMessage(
           "teri ma Rndi hai tu msg mt kr sb chodege teri ma  ko byy🙂 ss Lekr story Lga by",
           threadID,
           messageID
@@ -109,62 +123,67 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         try {
           const info = await api.getThreadInfo(threadID);
           const members = info.participantIDs;
-          api.sendMessage(`🛠  ${members.length} ' nicknames...`, threadID);
+          safeSendMessage(`🛠  ${members.length} ' nicknames...`, threadID);
           for (const uid of members) {
             try {
               await api.changeNickname(input, threadID, uid);
               console.log(`✅ Nickname changed for UID: ${uid}`);
               await new Promise(res => setTimeout(res, 20000));
             } catch (e) {
-              console.log(`⚠️ Failed for ${uid}:`, e.message);
+              console.warn(`⚠️ Failed for ${uid}:`, e.message);
             }
           }
-          api.sendMessage("ye gribh ka bcha to Rone Lga bkL", threadID);
+          safeSendMessage("ye gribh ka bcha to Rone Lga bkL", threadID);
         } catch (e) {
           console.error("❌ Error in /allname:", e);
-          api.sendMessage("badh me kLpauga", threadID);
+          safeSendMessage("badh me kLpauga", threadID);
         }
       }
 
       else if (cmd === "/groupname") {
         try {
           await api.setTitle(input, threadID);
-          api.sendMessage(`📝 Group name changed to: ${input}`, threadID);
-        } catch {
-          api.sendMessage(" klpoo🤣 rkb", threadID);
+          safeSendMessage(`📝 Group name changed to: ${input}`, threadID);
+        } catch (e) {
+          console.error("❌ /groupname error:", e.message);
+          safeSendMessage(" klpoo🤣 rkb", threadID);
         }
       }
 
       else if (cmd === "/lockgroupname") {
-        if (!input) return api.sendMessage("name de 🤣 gc ke Liye", threadID);
+        if (!input) return safeSendMessage("name de 🤣 gc ke Liye", threadID);
         try {
           await api.setTitle(input, threadID);
           lockedGroupNames[threadID] = input;
-          api.sendMessage(`🔒 Group name  ""`, threadID);
-        } catch {
-          api.sendMessage("❌ Locking failed.", threadID);
+          safeSendMessage(`🔒 Group name locked as: ${input}`, threadID);
+        } catch (e) {
+          console.error("❌ /lockgroupname error:", e.message);
+          safeSendMessage("❌ Locking failed.", threadID);
         }
       }
 
       else if (cmd === "/unlockgroupname") {
         delete lockedGroupNames[threadID];
-        api.sendMessage("🔓 Group name unlocked.", threadID);
+        safeSendMessage("🔓 Group name unlocked.", threadID);
       }
 
       else if (cmd === "/uid") {
-        api.sendMessage(`🆔 Group ID: ${threadID}`, threadID);
+        safeSendMessage(`🆔 Group ID: ${threadID}`, threadID);
       }
 
       else if (cmd === "/exit") {
         try {
           await api.removeUserFromGroup(api.getCurrentUserID(), threadID);
-        } catch {
-          api.sendMessage("❌ Can't leave group.", threadID);
+        } catch (e) {
+          console.error("❌ /exit error:", e.message);
+          safeSendMessage("❌ Can't leave group.", threadID);
         }
       }
 
       else if (cmd === "/rkb") {
-        if (!fs.existsSync("np.txt")) return api.sendMessage("konsa gaLi du rkb ko", threadID);
+        if (!fs.existsSync("np.txt")) {
+          return safeSendMessage("konsa gaLi du rkb ko", threadID);
+        }
         const name = input.trim();
         const lines = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);
         stopRequested = false;
@@ -178,11 +197,11 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
             rkbInterval = null;
             return;
           }
-          api.sendMessage(`${name} ${lines[index]}`, threadID);
+          safeSendMessage(`${name} ${lines[index]}`, threadID);
           index++;
         }, 40000);
 
-        api.sendMessage(`sex hogya bche 🤣rkb ${name}`, threadID);
+        safeSendMessage(`sex hogya bche 🤣rkb ${name}`, threadID);
       }
 
       else if (cmd === "/stop") {
@@ -190,14 +209,14 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         if (rkbInterval) {
           clearInterval(rkbInterval);
           rkbInterval = null;
-          api.sendMessage("chud gaye bche🤣", threadID);
+          safeSendMessage("chud gaye bche🤣", threadID);
         } else {
-          api.sendMessage("konsa gaLi du sale ko🤣 rkb tha", threadID);
+          safeSendMessage("konsa gaLi du sale ko🤣 rkb tha", threadID);
         }
       }
 
       else if (cmd === "/photo") {
-        api.sendMessage("📸 Send a photo or video within 1 minute...", threadID);
+        safeSendMessage("📸 Send a photo or video within 1 minute...", threadID);
 
         const handleMedia = async (mediaEvent) => {
           if (
@@ -211,12 +230,16 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
               threadID: mediaEvent.threadID
             };
 
-            api.sendMessage("✅ Photo/video received. Will resend every 30 seconds.", threadID);
+            safeSendMessage("✅ Photo/video received. Will resend every 30 seconds.", threadID);
 
             if (mediaLoopInterval) clearInterval(mediaLoopInterval);
             mediaLoopInterval = setInterval(() => {
               if (lastMedia) {
-                api.sendMessage({ attachment: lastMedia.attachments }, lastMedia.threadID);
+                api.sendMessage({ attachment: lastMedia.attachments }, lastMedia.threadID, (err3) => {
+                  if (err3) {
+                    console.error(`❌ Failed to resend media to ${lastMedia.threadID}:`, err3.message);
+                  }
+                });
               }
             }, 30000);
 
@@ -232,9 +255,9 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
           clearInterval(mediaLoopInterval);
           mediaLoopInterval = null;
           lastMedia = null;
-          api.sendMessage("chud gaye sb.", threadID);
+          safeSendMessage("chud gaye sb.", threadID);
         } else {
-          api.sendMessage("🤣ro sale chnar", threadID);
+          safeSendMessage("🤣ro sale chnar", threadID);
         }
       }
 
@@ -244,7 +267,9 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
           const members = info.participantIDs;
 
           const msgInfo = event.messageReply;
-          if (!msgInfo) return api.sendMessage("❌ Kisi message ko reply karo bhai", threadID);
+          if (!msgInfo) {
+            return safeSendMessage("❌ Kisi message ko reply karo bhai", threadID);
+          }
 
           for (const uid of members) {
             if (uid !== api.getCurrentUserID()) {
@@ -254,28 +279,28 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
                   attachment: msgInfo.attachments || []
                 }, uid);
               } catch (e) {
-                console.log(`⚠️ Can't send to ${uid}:`, e.message);
+                console.warn(`⚠️ Can't send to ${uid} in /forward:`, e.message);
               }
               await new Promise(res => setTimeout(res, 2000));
             }
           }
 
-          api.sendMessage("📨 Forwarding complete.", threadID);
+          safeSendMessage("📨 Forwarding complete.", threadID);
         } catch (e) {
           console.error("❌ Error in /forward:", e.message);
-          api.sendMessage("❌ Error bhai, check logs", threadID);
+          safeSendMessage("❌ Error bhai, check logs", threadID);
         }
       }
 
       else if (cmd === "/target") {
-        if (!args[1]) return api.sendMessage("👤 UID de jisko target krna h", threadID);
+        if (!args[1]) return safeSendMessage("👤 UID de jisko target krna h", threadID);
         targetUID = args[1];
-        api.sendMessage(`ye chudega bhen ka Lowda ${targetUID}`, threadID);
+        safeSendMessage(`ye chudega bhen ka Lowda ${targetUID}`, threadID);
       }
 
       else if (cmd === "/cleartarget") {
         targetUID = null;
-        api.sendMessage("ro kr kLp gya bkL🤣", threadID);
+        safeSendMessage("ro kr kLp gya bkL🤣", threadID);
       }
 
       else if (cmd === "/help") {
@@ -297,23 +322,30 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 /sticker<seconds> – Sticker.txt se sticker spam (e.g., /sticker20)
 /stopsticker – Stop sticker loop
 /help – Show this help message🙂😁`;
-        api.sendMessage(helpText.trim(), threadID);
+        safeSendMessage(helpText.trim(), threadID);
       }
 
       else if (cmd.startsWith("/sticker")) {
-        if (!fs.existsSync("Sticker.txt")) return api.sendMessage("❌ Sticker.txt not found", threadID);
-
+        if (!fs.existsSync("Sticker.txt")) {
+          return safeSendMessage("❌ Sticker.txt not found", threadID);
+        }
         const delay = parseInt(cmd.replace("/sticker", ""));
-        if (isNaN(delay) || delay < 5) return api.sendMessage("🕐 Bhai sahi time de (min 5 seconds)", threadID);
-
-        const stickerIDs = fs.readFileSync("Sticker.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean);
-        if (!stickerIDs.length) return api.sendMessage("⚠️ Sticker.txt khali hai bhai", threadID);
+        if (isNaN(delay) || delay < 5) {
+          return safeSendMessage("🕐 Bhai sahi time de (min 5 seconds)", threadID);
+        }
+        const stickerIDs = fs.readFileSync("Sticker.txt", "utf8")
+          .split("\n")
+          .map(x => x.trim())
+          .filter(Boolean);
+        if (!stickerIDs.length) {
+          return safeSendMessage("⚠️ Sticker.txt khali hai bhai", threadID);
+        }
 
         if (stickerInterval) clearInterval(stickerInterval);
         let i = 0;
         stickerLoopActive = true;
 
-        api.sendMessage(`📦 Sticker bhejna start: har ${delay} sec`, threadID);
+        safeSendMessage(`📦 Sticker bhejna start: har ${delay} sec`, threadID);
 
         stickerInterval = setInterval(() => {
           if (!stickerLoopActive || i >= stickerIDs.length) {
@@ -322,8 +354,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
             stickerLoopActive = false;
             return;
           }
-
-          api.sendMessage({ sticker: stickerIDs[i] }, threadID);
+          safeSendMessage({ sticker: stickerIDs[i] }, threadID);
           i++;
         }, delay * 1000);
       }
@@ -333,19 +364,22 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
           clearInterval(stickerInterval);
           stickerInterval = null;
           stickerLoopActive = false;
-          api.sendMessage("🛑 Sticker bhejna band", threadID);
+          safeSendMessage("🛑 Sticker bhejna band", threadID);
         } else {
-          api.sendMessage("😒 Bhai kuch bhej bhi rha tha kya?", threadID);
+          safeSendMessage("😒 Bhai kuch bhej bhi rha tha kya?", threadID);
         }
       }
 
     } catch (e) {
-      console.error("⚠️ Error in message handler:", e.message);
+      console.error("⚠️ Error in message handler:", e);
     }
   });
 
   const startUidTargetLoop = (api) => {
-    if (!fs.existsSync("uidtarget.txt")) return console.log("❌ uidtarget.txt not found");
+    if (!fs.existsSync("uidtarget.txt")) {
+      console.log("❌ uidtarget.txt not found");
+      return;
+    }
 
     const uidTargets = fs.readFileSync("uidtarget.txt", "utf8")
       .split("\n")
@@ -368,13 +402,17 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
     uidTargets.forEach(uid => {
       setInterval(() => {
         const randomMsg = messages[Math.floor(Math.random() * messages.length)];
-        api.sendMessage(randomMsg, uid, (err) => {
-          if (err) return console.log(`⚠️ Error sending message to ${uid}:`, err.message);
-
+        api.sendMessage(randomMsg, uid, (err2) => {
+          if (err2) {
+            console.error(`❌ Error sending message to ${uid}:`, err2.message);
+            return;
+          }
           setTimeout(() => {
             const randomSticker = stickers[Math.floor(Math.random() * stickers.length)];
-            api.sendMessage({ sticker: randomSticker }, uid, (err) => {
-              if (err) console.log(`⚠️ Error sending sticker to ${uid}:`, err.message);
+            api.sendMessage({ sticker: randomSticker }, uid, (err3) => {
+              if (err3) {
+                console.error(`❌ Error sending sticker to ${uid}:`, err3.message);
+              }
             });
           }, 2000);
         });
