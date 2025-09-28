@@ -1,4 +1,4 @@
-import login from "fca-priyansh";
+import login from "ws3-fca";
 import fs from "fs";
 import express from "express";
 
@@ -29,21 +29,22 @@ app.listen(20782, () => console.log("🌐 Log server: http://localhost:20782"));
 process.on("uncaughtException", (err) => console.error("❗ Uncaught Exception:", err));
 process.on("unhandledRejection", (reason) => console.error("❗ Unhandled Rejection:", reason));
 
-login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, api) => {
+login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, async (err, api) => {
   if (err) {
     console.error("❌ Login failed:", err);
     return;
   }
 
+  // Enable listening to events
   api.setOptions({ listenEvents: true });
-  OWNER_UIDS.push(api.getCurrentUserID()); // allow self commands
-  console.log("✅ Bot logged in and running...");
+  OWNER_UIDS.push(api.getCurrentUserID());  
+  console.log("✅ Bot logged in and running with ws3-fca...");
 
-  // Wrapper so we always catch errors in sendMessage
+  // Wrapper for sendMessage for error logging
   const safeSendMessage = (content, threadID, messageID = null) => {
     api.sendMessage(content, threadID, messageID, (err2) => {
       if (err2) {
-        console.error(`❌ Failed to send message to thread ${threadID} (msgID ${messageID}):`, err2.message);
+        console.error(`❌ Failed to send message to threadID ${threadID} (msgID ${messageID}):`, err2.message);
       }
     });
   };
@@ -119,6 +120,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       const cmd = args[0].toLowerCase();
       const input = args.slice(1).join(" ");
 
+      // === Commands same as before ===
       if (cmd === "/allname") {
         try {
           const info = await api.getThreadInfo(threadID);
@@ -317,7 +319,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 /photo – Send photo/video after this; it will repeat every 30s
 /stopphoto – Stop repeating photo/video
 /forward – Reply kisi message pe kro, sabko forward ho jaega
-/target <uid> – Kisi UID ko target kr, msg pe random gali dega
+/target <uid> – Kisi UID kr target, msg pe random gali dega
 /cleartarget – Target hata dega
 /sticker<seconds> – Sticker.txt se sticker spam (e.g., /sticker20)
 /stopsticker – Stop sticker loop
