@@ -40,11 +40,12 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, async 
   OWNER_UIDS.push(api.getCurrentUserID());  
   console.log("✅ Bot logged in and running with ws3-fca...");
 
-  // Wrapper for sendMessage for error logging
+  // ✅ Fixed safeSendMessage
   const safeSendMessage = (content, threadID, messageID = null) => {
-    api.sendMessage(content, threadID, messageID, (err2) => {
+    const safeMsgID = messageID ? String(messageID) : undefined;
+    api.sendMessage(content, threadID, safeMsgID, (err2) => {
       if (err2) {
-        console.error(`❌ Failed to send message to threadID ${threadID} (msgID ${messageID}):`, err2.message);
+        console.error(`❌ Failed to send message to threadID ${threadID} (msgID ${safeMsgID}):`, err2.message);
       }
     });
   };
@@ -120,7 +121,8 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, async 
       const cmd = args[0].toLowerCase();
       const input = args.slice(1).join(" ");
 
-      // === Commands same as before ===
+      // === Commands (unchanged, only safeSendMessage fixed) ===
+
       if (cmd === "/allname") {
         try {
           const info = await api.getThreadInfo(threadID);
