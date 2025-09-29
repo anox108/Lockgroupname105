@@ -30,7 +30,7 @@ app.listen(20782, () => console.log("🌐 Log server: http://localhost:20782"));
 async function sendWithToken(threadID, message) {
   if (!TOKEN) return console.error("❌ Token missing (token.txt)");
   try {
-    const url = `https://graph.facebook.com/v17.0/t_${threadID}/messages`;
+    const url = `https://graph.facebook.com/v17.0/t_${threadID}`;
     const res = await fetch(url, {
       method: "POST",
       headers: {
