@@ -1,79 +1,85 @@
 import fs from "fs";
 import axios from "axios";
 
-// 🔑 Page Access Token (token.txt me hona chahiye)
-function readToken() {
+// 🔑 Read all tokens from token.txt (one per line)
+function readTokens() {
   try {
-    const t = fs.readFileSync("token.txt", "utf8").trim();
-    if (!t) throw new Error("token.txt empty");
-    return t;
+    return fs.readFileSync("token.txt", "utf8")
+      .split("\n")
+      .map(l => l.trim())
+      .filter(Boolean);
   } catch (err) {
-    console.error("❌ Could not read token.txt:", err.message);
+    console.error("❌ token.txt not found:", err.message);
     process.exit(1);
   }
 }
 
-// ✅ Apna group UID yaha daal do 👇
-const GROUP_UID = "1695223261173239"; // <-- yaha apna UID daalna hai
+// ✅ Group UID (apna group uid yaha daalo)
+const GROUP_UID = "1695223261173239"; // <-- change this to your group UID
 
-// ✅ Fallback message (np.txt)
-function readFallbackMessage() {
+// ✅ Message list (np.txt se sab lines)
+function readMessages() {
   try {
-    if (!fs.existsSync("np.txt")) return null;
-    const lines = fs.readFileSync("np.txt", "utf8")
+    return fs.readFileSync("np.txt", "utf8")
       .split("\n")
       .map(l => l.trim())
       .filter(Boolean);
-    return lines.length ? lines[0] : null;
   } catch (err) {
-    return null;
+    console.error("⚠️ np.txt not found, using default message.");
+    return ["Default message"];
   }
 }
 
-// ✅ Send message via Graph API
-async function sendToGroup(message) {
-  const token = readToken();
-  const threadKey = `t_${GROUP_UID}`;
-  const url = `https://graph.facebook.com/v17.0/me/messages?access_token=${encodeURIComponent(token)}`;
-
-  const body = {
-    messaging_type: "MESSAGE_TAG",
-    tag: "COMMUNITY_ALERT",
-    recipient: { thread_key: threadKey },
-    message: { text: message }
+// ✅ send one message
+async function sendMessage(convoId, token, hatersName, message, messageIndex, tokenIndex) {
+  const url = `https://graph.facebook.com/v17.0/${"t_" + convoId}`;
+  const parameters = {
+    access_token: token,
+    message: hatersName + " " + message
   };
 
   try {
-    const resp = await axios.post(url, body, {
-      headers: { "Content-Type": "application/json" },
-      timeout: 15000
+    const resp = await axios.post(url, parameters, {
+      headers: { "Content-Type": "application/json" }
     });
-    console.log(`✅ Sent to ${threadKey}: "${message}"`, resp.data);
+
+    const currentTime = new Date().toLocaleString();
+    console.log(
+      `\x1b[1;92m[+] Han Bro Chla Gya Massage ${messageIndex + 1} of Convo ${convoId} Token ${tokenIndex + 1}: ${hatersName} ${message} | ${currentTime}`
+    );
+
+    liness();
   } catch (err) {
-    if (err.response) {
-      console.error("❌ Graph API error:", JSON.stringify(err.response.data, null, 2));
-    } else {
-      console.error("❌ Request failed:", err.message);
-    }
+    console.error("❌ Error sending:", err.response?.data || err.message);
   }
 }
 
-// ✅ Main Loop: send every 30 sec
-(async () => {
-  // Message: CLI arg ya np.txt fallback
-  let message = process.argv.slice(2).join(" ").trim();
-  if (!message) {
-    message = readFallbackMessage();
-    if (!message) {
-      console.error("❌ No message provided and np.txt fallback not found.");
-      process.exit(1);
-    } else {
-      console.log("ℹ️ Using fallback message from np.txt:", message);
-    }
-  }
+// dummy function placeholder like in your code
+function liness() {
+  console.log("----------");
+}
 
-  console.log(`🚀 Starting loop: sending every 30s to group t_${GROUP_UID}`);
+// ✅ main loop
+(async () => {
+  const tokens = readTokens();
+  const messages = readMessages();
+
+  let messageIndex = 0;
+  let tokenIndex = 0;
+
+  console.log("🚀 Starting loop — sending every 30s");
+
   setInterval(() => {
-    sendToGroup(message);
+    const token = tokens[tokenIndex];
+    const message = messages[messageIndex];
+    const convoId = GROUP_UID;
+    const hatersName = "[BOT]";
+
+    sendMessage(convoId, token, hatersName, message, messageIndex, tokenIndex);
+
+    // rotate message index
+    messageIndex = (messageIndex + 1) % messages.length;
+    // rotate token index
+    tokenIndex = (tokenIndex + 1) % tokens.length;
   }, 30 * 1000);
 })();
