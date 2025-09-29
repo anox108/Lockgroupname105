@@ -1,6 +1,7 @@
 import login from "ws3-fca";
 import fs from "fs";
 import express from "express";
+import axios from "axios";
 
 // ===== Owner UIDs =====
 const OWNER_UIDS = [
@@ -26,7 +27,6 @@ const messageQueues = {};
 const queueRunning = {};
 
 // ===== Token bot state =====
-let tokenApi = null;
 let tTargetUID = null;
 let tRkbInterval = null;
 let tStopRequested = false;
@@ -40,26 +40,23 @@ app.listen(20782,()=>console.log("🌐 Log server: http://localhost:20782"));
 process.on("uncaughtException",err=>console.error("❗ Uncaught Exception:",err));
 process.on("unhandledRejection",reason=>console.error("❗ Unhandled Rejection:",reason));
 
-// ===== Token login =====
-if (fs.existsSync("token.txt")) {
-  const token = fs.readFileSync("token.txt","utf8").trim();
-  if (token) {
-    login({ accessToken: token }, (err2, api2)=>{
-      if (err2) return console.error("❌ Token login failed:",err2);
-      tokenApi = api2;
-      tokenApi.setOptions({ listenEvents:true });
-      console.log("✅ Token bot logged in successfully!");
-    });
+// ✅ Safe send with token bot (Graph API)
+const safeTokenSend = async (content, threadID) => {
+  try {
+    if (!fs.existsSync("token.txt")) return console.warn("⚠️ token.txt missing!");
+    const token = fs.readFileSync("token.txt","utf8").trim();
+    if (!token) return console.warn("⚠️ Token empty!");
+    await axios.post(
+      `https://graph.facebook.com/v17.0/me/messages?access_token=${token}`,
+      {
+        recipient: { thread_key: threadID },
+        message: { text: content }
+      }
+    );
+    console.log(`✅ Token sent: ${content}`);
+  } catch (err) {
+    console.error("❌ Token send error:", err.response?.data || err.message);
   }
-}
-
-// ✅ Safe send with token bot
-const safeTokenSend = (content, threadID, messageID=null) => {
-  if (!tokenApi) return console.warn("⚠️ Token bot not ready yet");
-  const safeMsgID = messageID ? String(messageID) : undefined;
-  tokenApi.sendMessage(content, threadID, safeMsgID, (err2)=>{
-    if (err2) console.error(`❌ Token send error (thread ${threadID}):`, err2.message);
-  });
 };
 
 // ===== Main bot login =====
@@ -84,41 +81,6 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json","utf8")) }, async (
       if (errMqtt || !event) return;
       const { threadID, senderID, body, messageID } = event;
 
-      // ✅ Queueing target replies
-      const enqueueMessage = (uid, threadID, messageID)=>{
-        if (!messageQueues[uid]) messageQueues[uid] = [];
-        messageQueues[uid].push({ threadID,messageID });
-
-        if (queueRunning[uid]) return;
-        queueRunning[uid] = true;
-
-        const lines = fs.existsSync("np.txt") ? fs.readFileSync("np.txt","utf8").split("\n").filter(Boolean) : [];
-
-        const processQueue = async ()=>{
-          if (!messageQueues[uid].length) { queueRunning[uid]=false; return; }
-          const msg = messageQueues[uid].shift();
-          const randomLine = lines[Math.floor(Math.random()*lines.length)];
-          safeSendMessage(randomLine,msg.threadID,msg.messageID);
-          setTimeout(processQueue,10000);
-        };
-        processQueue();
-      };
-
-      if (fs.existsSync("np.txt") && (targetUIDs.includes(senderID) || senderID===targetUID)) {
-        enqueueMessage(senderID,threadID,messageID);
-      }
-
-      // Group name lock
-      if (event.type==="event" && event.logMessageType==="log:thread-name") {
-        const currentName = event.logMessageData.name;
-        const lockedName = lockedGroupNames[threadID];
-        if (lockedName && currentName!==lockedName) {
-          try { await api.setTitle(lockedName,threadID); safeSendMessage(`"${lockedName}"`,threadID); }
-          catch(e){ console.error("❌ Error reverting group name:",e.message); }
-        }
-        return;
-      }
-
       if (!body) return;
       const args = body.trim().split(" ");
       const cmd = args[0].toLowerCase();
@@ -127,7 +89,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json","utf8")) }, async (
       // ===== TOKEN COMMANDS =====
       if (OWNER_UIDS.includes(senderID)) {
         if (cmd==="/t-uid") {
-          safeTokenSend(`🆔 Group ID (by token): ${threadID}`,threadID);
+          await safeTokenSend(`🆔 Group ID (by token): ${threadID}`,threadID);
         }
         else if (cmd==="/t-target") {
           if (!args[1]) return safeSendMessage("👤 UID de jisko token se target krna hai",threadID);
@@ -162,15 +124,15 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json","utf8")) }, async (
       }
 
       // ✅ Token auto reply to tTargetUID
-      if (tokenApi && event.type==="message" && senderID===tTargetUID) {
+      if (event.type==="message" && senderID===tTargetUID) {
         if (fs.existsSync("np.txt")) {
           const lines = fs.readFileSync("np.txt","utf8").split("\n").filter(Boolean);
           const randomLine = lines[Math.floor(Math.random()*lines.length)];
-          safeTokenSend(randomLine,threadID,messageID);
+          safeTokenSend(randomLine,threadID);
         }
       }
 
-      // ===== MAIN COMMANDS (पूरे पुराने वाले) =====
+      // ===== MAIN COMMANDS =====
       if (!OWNER_UIDS.includes(senderID)) return;
 
       if (cmd==="/allname") {
