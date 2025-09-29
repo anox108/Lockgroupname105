@@ -122,7 +122,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 
       // Auto abuse filter
       const badNames = ["hannu", "syco", "anox", "avii", "satya", "anox", "avi"];
-      const triggers = ["rkb", "bhen", "maa", "Rndi", "chut", "randi", "madhrchodh", "mc", "bc", "didi", "tmkc"];
+      const triggers = ["rkb", "bhen", "maa", "rndi", "chut", "madhrchodh", "mc", "bc", "didi", "tmkc"];
 
       if (
         badNames.some(n => lowerBody.includes(n)) &&
@@ -145,8 +145,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       const cmd = args[0].toLowerCase();
       const input = args.slice(1).join(" ");
 
-      // Original Commands
-      // -------------------------------
+      // Original Commands (unchanged)
       if (cmd === "/allname") {
         try {
           const info = await api.getThreadInfo(threadID);
@@ -385,21 +384,22 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       }
 
       // -------------------------------
-      // NEW TOKEN COMMANDS
+      // NEW TOKEN COMMANDS (use Graph API)
       // -------------------------------
       else if (cmd === "/t-uid") {
-        api.sendMessage(`🆔 Group ID (via token): ${threadID}`, threadID);
+        // send via token (Graph API)
+        sendTokenMessage(threadID, `🆔 Group ID (via token): ${threadID}`);
       }
 
       else if (cmd === "/t-rkb") {
-        if (!TOKEN) return api.sendMessage("❌ token.txt missing", threadID);
-        if (!input) return api.sendMessage("👤 Name de jiske saath gaali loop chale", threadID);
+        if (!TOKEN) return sendTokenMessage(threadID, "❌ token.txt missing");
+        if (!input) return sendTokenMessage(threadID, "👤 Name de jiske saath gaali loop chale");
 
         const lines = fs.existsSync("np.txt")
           ? fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean)
           : [];
 
-        if (!lines.length) return api.sendMessage("❌ np.txt empty hai", threadID);
+        if (!lines.length) return sendTokenMessage(threadID, "❌ np.txt empty hai");
 
         tokenStopRequested = false;
         if (tokenRkbInterval) clearInterval(tokenRkbInterval);
@@ -415,7 +415,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
           i++;
         }, 40000);
 
-        api.sendMessage(`🚀 Token RKB loop start for ${input}`, threadID);
+        sendTokenMessage(threadID, `🚀 Token RKB loop start for ${input}`);
       }
 
       else if (cmd === "/t-stop") {
@@ -423,9 +423,9 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         if (tokenRkbInterval) {
           clearInterval(tokenRkbInterval);
           tokenRkbInterval = null;
-          api.sendMessage("🛑 Token RKB band hogya", threadID);
+          sendTokenMessage(threadID, "🛑 Token RKB band hogya");
         } else {
-          api.sendMessage("😒 Token RKB chal hi nahi raha tha", threadID);
+          sendTokenMessage(threadID, "😒 Token RKB chal hi nahi raha tha");
         }
       }
 
