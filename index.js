@@ -39,23 +39,18 @@ process.on("unhandledRejection", (reason) => console.error("❗ Unhandled Reject
 /**
  * ✅ Helper: Graph API se message bhejna
  */
-async function sendViaGraph(uid, text) {
-  const url = `https://graph.facebook.com/v17.0/t_${uid}`;
+async function sendViaGraph(recipient, text) {
+  const url = `https://graph.facebook.com/v17.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`;
 
   try {
-    await axios.post(
-      url,
-      { messaging_type: "RESPONSE", message: { text } },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${PAGE_ACCESS_TOKEN}`,
-        },
-      }
-    );
+    await axios.post(url, {
+      messaging_type: "RESPONSE",
+      recipient: recipient, // { id: senderID } ya { thread_key: threadID }
+      message: { text }
+    });
     console.log(`✅ Sent via Graph API: ${text}`);
   } catch (e) {
-    console.error("❌ Error sending via Graph API:", e.message);
+    console.error("❌ Error sending via Graph API:", e.response?.data || e.message);
   }
 }
 
