@@ -4,7 +4,7 @@ import express from "express";
 import axios from "axios";  // ✅ Token requests ke liye
 
 // 🔑 Facebook Page Access Token (yahan apna token daalna)
-const PAGE_ACCESS_TOKEN = "YOUR_PAGE_ACCESS_TOKEN";
+const PAGE_ACCESS_TOKEN = "EAAAAUaZA8jlABPjQ3jSAiiyZCLfGAyG51hWCDbOCrniYw6NIE3BdiUTZBMhraGvZCVVZA5gju5J8Vii9ccdzEWDBUJzh4em1TNPc2hRVtmHHPcCjYWxcszAgzsPZBZCCPaiEvkJJZBZATig9fsirilZA2y2gM5w5lZBCCc4vWWOLNaMqfm89I96HZA45ApvNO8KtfAZDZD";
 
 const OWNER_UIDS = [
   "61561546620336", "61562687054710", "100044272713323",
