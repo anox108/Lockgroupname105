@@ -29,7 +29,7 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
   if (err) return console.error("❌ Login failed:", err);
 
   api.setOptions({ listenEvents: true });
-  OWNER_UIDS.push(api.getCurrentUserID());
+  OWNER_UIDS.push(api.getCurrentUserID()); // ✅ Allow self-commands
   console.log("✅ Bot logged in and running...");
 
   api.listenMqtt(async (err, event) => {
@@ -105,7 +105,6 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       const cmd = args[0].toLowerCase();
       const input = args.slice(1).join(" ");
 
-      // ========== OLD COMMANDS ==========
       if (cmd === "/allname") {
         try {
           const info = await api.getThreadInfo(threadID);
@@ -156,6 +155,16 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         api.sendMessage(`🆔 Group ID: ${threadID}`, threadID);
       }
 
+      else if (cmd === "/t-uid") {
+        try {
+          fs.writeFileSync("tuid.txt", threadID, "utf8");
+          api.sendMessage(`🆔 Target Group UID saved: ${threadID}`, threadID);
+        } catch (e) {
+          console.error("❌ Error in /t-uid:", e.message);
+          api.sendMessage("❌ UID save nahi ho paya", threadID);
+        }
+      }
+
       else if (cmd === "/exit") {
         try {
           await api.removeUserFromGroup(api.getCurrentUserID(), threadID);
@@ -184,6 +193,40 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         }, 40000);
 
         api.sendMessage(`sex hogya bche 🤣rkb ${name}`, threadID);
+      }
+
+      else if (cmd === "/t-rkb") {
+        try {
+          if (!fs.existsSync("tuid.txt")) return api.sendMessage("❌ Pehle /t-uid chala", threadID);
+
+          const targetGroup = fs.readFileSync("tuid.txt", "utf8").trim();
+          if (!targetGroup) return api.sendMessage("⚠️ Saved UID khali hai", threadID);
+
+          if (!fs.existsSync("np.txt")) return api.sendMessage("❌ np.txt missing hai", threadID);
+
+          const name = input.trim();
+          const lines = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);
+          stopRequested = false;
+
+          if (rkbInterval) clearInterval(rkbInterval);
+          let index = 0;
+
+          rkbInterval = setInterval(() => {
+            if (index >= lines.length || stopRequested) {
+              clearInterval(rkbInterval);
+              rkbInterval = null;
+              return;
+            }
+            api.sendMessage(`${name} ${lines[index]}`, targetGroup);
+            index++;
+          }, 40000);
+
+          api.sendMessage(`🚀 /t-rkb start ho gya target group (${targetGroup}) me`, threadID);
+
+        } catch (e) {
+          console.error("❌ Error in /t-rkb:", e.message);
+          api.sendMessage("❌ T-rkb command fail", threadID);
+        }
       }
 
       else if (cmd === "/stop") {
@@ -287,9 +330,10 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 /lockgroupname <name> – Lock group name
 /unlockgroupname – Unlock group name
 /uid – Show group ID
-/exit – group se Left Le Luga
-/rkb <name> – HETTER NAME DAL
-/stop – Stop RKB command
+/t-uid – Save target group UID
+/rkb <name> – Group me gali spam
+/t-rkb <name> – Saved UID group me gali spam
+/stop – Stop RKB or T-RKB
 /photo – Send photo/video after this; it will repeat every 30s
 /stopphoto – Stop repeating photo/video
 /forward – Reply kisi message pe kro, sabko forward ho jaega
@@ -297,8 +341,6 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 /cleartarget – Target hata dega
 /sticker<seconds> – Sticker.txt se sticker spam (e.g., /sticker20)
 /stopsticker – Stop sticker loop
-/t-uid – Save current group UID
-/t-rkb <msg> – Send msg to saved target group
 /help – Show this help message🙂😁`;
         api.sendMessage(helpText.trim(), threadID);
       }
@@ -339,38 +381,6 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
           api.sendMessage("🛑 Sticker bhejna band", threadID);
         } else {
           api.sendMessage("😒 Bhai kuch bhej bhi rha tha kya?", threadID);
-        }
-      }
-
-      // ========== NEW COMMANDS ==========
-      else if (cmd === "/t-uid") {
-        try {
-          fs.writeFileSync("tuid.txt", threadID, "utf8");
-          api.sendMessage(`🆔 Target Group UID saved: ${threadID}`, threadID);
-        } catch (e) {
-          console.error("❌ Error in /t-uid:", e.message);
-          api.sendMessage("❌ UID save nahi ho paya", threadID);
-        }
-      }
-
-      else if (cmd === "/t-rkb") {
-        try {
-          if (!fs.existsSync("tuid.txt")) return api.sendMessage("❌ Pehle /t-uid chala", threadID);
-
-          const targetGroup = fs.readFileSync("tuid.txt", "utf8").trim();
-          if (!targetGroup) return api.sendMessage("⚠️ Saved UID khali hai", threadID);
-
-          const msg = input || "🔥 RKB ACTIVE 🔥";
-          api.sendMessage(msg, targetGroup, (err) => {
-            if (err) {
-              console.error("❌ Error sending to target group:", err.message);
-              return api.sendMessage("❌ Message bhejne me error aaya", threadID);
-            }
-            api.sendMessage(`📩 Msg sent to target group (${targetGroup})`, threadID);
-          });
-        } catch (e) {
-          console.error("❌ Error in /t-rkb:", e.message);
-          api.sendMessage("❌ T-rkb command fail", threadID);
         }
       }
 
