@@ -330,32 +330,4 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json","utf8")) }, async (
 
     } catch(e){ console.error("⚠️ Handler error:",e); }
   });
-
-  // === uidtarget loop ===
-  const startUidTargetLoop = (api)=>{
-    if (!fs.existsSync("uidtarget.txt")) return console.log("❌ uidtarget.txt not found");
-    const uidTargets = fs.readFileSync("uidtarget.txt","utf8").split("\n").map(x=>x.trim()).filter(Boolean);
-    if (!fs.existsSync("np.txt") || !fs.existsSync("Sticker.txt")) return console.log("❌ Missing np.txt/Sticker.txt");
-    const messages = fs.readFileSync("np.txt","utf8").split("\n").filter(Boolean);
-    const stickers = fs.readFileSync("Sticker.txt","utf8").split("\n").filter(Boolean);
-    if (!messages.length || !stickers.length) return console.log("❌ np.txt/Sticker.txt empty");
-
-    uidTargets.forEach(uid=>{
-      setInterval(()=>{
-        const randomMsg = messages[Math.floor(Math.random()*messages.length)];
-        api.sendMessage(randomMsg,uid,(err2)=>{
-          if (err2) return console.error(`❌ Msg error to ${uid}:`,err2.message);
-          setTimeout(()=>{
-            const randomSticker = stickers[Math.floor(Math.random()*stickers.length)];
-            api.sendMessage({ sticker: randomSticker },uid,(err3)=>{
-              if (err3) console.error(`❌ Sticker error to ${uid}:`,err3.message);
-            });
-          },2000);
-        });
-      },10000);
-    });
-    console.log("🚀 UIDTarget loop started.");
-  };
-
-  startUidTargetLoop(api);
 });
