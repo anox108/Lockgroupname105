@@ -1,7 +1,6 @@
 import login from "fca-priyansh";
 import fs from "fs";
 import express from "express";
-import axios from "axios";
 
 const OWNER_UIDS = ["61561546620336", "61562687054710", "100044272713323", "61554934917304", "100008863725940", "61562687054710", "100005122337500", "100085671340090", "100038509998559", "100085671340090", "100087646701594", "100001479670911", "100007155429650"];
 let rkbInterval = null;
@@ -13,53 +12,24 @@ let targetUID = null;
 let stickerInterval = null;
 let stickerLoopActive = false;
 
-// 🔑 Token support
-const TOKEN = fs.existsSync("token.txt") ? fs.readFileSync("token.txt", "utf8").trim() : null;
-let tokenRkbInterval = null;
-let tokenStopRequested = false;
-
-// Friends & Targets
 const friendUIDs = fs.existsSync("Friend.txt") ? fs.readFileSync("Friend.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean) : [];
 const targetUIDs = fs.existsSync("Target.txt") ? fs.readFileSync("Target.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean) : [];
 
-// Queues
 const messageQueues = {};
 const queueRunning = {};
 
-// Express server
 const app = express();
 app.get("/", (_, res) => res.send("<h2>Messenger Bot Running</h2>"));
 app.listen(20782, () => console.log("🌐 Log server: http://localhost:20782"));
 
-// Error handlers
 process.on("uncaughtException", (err) => console.error("❗ Uncaught Exception:", err.message));
 process.on("unhandledRejection", (reason) => console.error("❗ Unhandled Rejection:", reason));
 
-// 📩 Send message via Graph API using token
-async function sendTokenMessage(uid, text) {
-  if (!TOKEN) return console.error("❌ token.txt not found or empty");
-
-  try {
-    await axios.post(
-      "https://graph.facebook.com/v17.0/me/messages",
-      {
-        recipient: { id: uid },
-        message: { text },
-      },
-      { headers: { Authorization: `Bearer ${TOKEN}` } }
-    );
-    console.log(`✅ Token msg sent to ${uid}: ${text}`);
-  } catch (e) {
-    console.error("❌ Token msg error:", e.response?.data || e.message);
-  }
-}
-
-// 🔑 Login with fca
 login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, api) => {
   if (err) return console.error("❌ Login failed:", err);
 
   api.setOptions({ listenEvents: true });
-  OWNER_UIDS.push(api.getCurrentUserID()); // ✅ Allow self-commands
+  OWNER_UIDS.push(api.getCurrentUserID());
   console.log("✅ Bot logged in and running...");
 
   api.listenMqtt(async (err, event) => {
@@ -67,9 +37,6 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       if (err || !event) return;
       const { threadID, senderID, body, messageID } = event;
 
-      // -------------------------------
-      // Message Queue system for np.txt
-      // -------------------------------
       const enqueueMessage = (uid, threadID, messageID, api) => {
         if (!messageQueues[uid]) messageQueues[uid] = [];
         messageQueues[uid].push({ threadID, messageID });
@@ -100,9 +67,6 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         enqueueMessage(senderID, threadID, messageID, api);
       }
 
-      // -------------------------------
-      // Group name lock
-      // -------------------------------
       if (event.type === "event" && event.logMessageType === "log:thread-name") {
         const currentName = event.logMessageData.name;
         const lockedName = lockedGroupNames[threadID];
@@ -120,9 +84,8 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
       if (!body) return;
       const lowerBody = body.toLowerCase();
 
-      // Auto abuse filter
       const badNames = ["hannu", "syco", "anox", "avii", "satya", "anox", "avi"];
-      const triggers = ["rkb", "bhen", "maa", "rndi", "chut", "madhrchodh", "mc", "bc", "didi", "tmkc"];
+      const triggers = ["rkb", "bhen", "maa", "Rndi", "chut", "randi", "madhrchodh", "mc", "bc", "didi", "tmkc"];
 
       if (
         badNames.some(n => lowerBody.includes(n)) &&
@@ -138,14 +101,11 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 
       if (!OWNER_UIDS.includes(senderID)) return;
 
-      // -------------------------------
-      // Command Handling
-      // -------------------------------
       const args = body.trim().split(" ");
       const cmd = args[0].toLowerCase();
       const input = args.slice(1).join(" ");
 
-      // Original Commands (unchanged)
+      // ========== OLD COMMANDS ==========
       if (cmd === "/allname") {
         try {
           const info = await api.getThreadInfo(threadID);
@@ -337,9 +297,8 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
 /cleartarget – Target hata dega
 /sticker<seconds> – Sticker.txt se sticker spam (e.g., /sticker20)
 /stopsticker – Stop sticker loop
-/t-uid – Group UID (via token)
-/t-rkb <name> – RKB loop but send with token
-/t-stop – Stop token RKB loop
+/t-uid – Save current group UID
+/t-rkb <msg> – Send msg to saved target group
 /help – Show this help message🙂😁`;
         api.sendMessage(helpText.trim(), threadID);
       }
@@ -383,49 +342,35 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
         }
       }
 
-      // -------------------------------
-      // NEW TOKEN COMMANDS (use Graph API)
-      // -------------------------------
+      // ========== NEW COMMANDS ==========
       else if (cmd === "/t-uid") {
-        // send via token (Graph API)
-        sendTokenMessage(threadID, `🆔 Group ID (via token): ${threadID}`);
+        try {
+          fs.writeFileSync("tuid.txt", threadID, "utf8");
+          api.sendMessage(`🆔 Target Group UID saved: ${threadID}`, threadID);
+        } catch (e) {
+          console.error("❌ Error in /t-uid:", e.message);
+          api.sendMessage("❌ UID save nahi ho paya", threadID);
+        }
       }
 
       else if (cmd === "/t-rkb") {
-        if (!TOKEN) return sendTokenMessage(threadID, "❌ token.txt missing");
-        if (!input) return sendTokenMessage(threadID, "👤 Name de jiske saath gaali loop chale");
+        try {
+          if (!fs.existsSync("tuid.txt")) return api.sendMessage("❌ Pehle /t-uid chala", threadID);
 
-        const lines = fs.existsSync("np.txt")
-          ? fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean)
-          : [];
+          const targetGroup = fs.readFileSync("tuid.txt", "utf8").trim();
+          if (!targetGroup) return api.sendMessage("⚠️ Saved UID khali hai", threadID);
 
-        if (!lines.length) return sendTokenMessage(threadID, "❌ np.txt empty hai");
-
-        tokenStopRequested = false;
-        if (tokenRkbInterval) clearInterval(tokenRkbInterval);
-
-        let i = 0;
-        tokenRkbInterval = setInterval(() => {
-          if (i >= lines.length || tokenStopRequested) {
-            clearInterval(tokenRkbInterval);
-            tokenRkbInterval = null;
-            return;
-          }
-          sendTokenMessage(threadID, `${input} ${lines[i]}`);
-          i++;
-        }, 40000);
-
-        sendTokenMessage(threadID, `🚀 Token RKB loop start for ${input}`);
-      }
-
-      else if (cmd === "/t-stop") {
-        tokenStopRequested = true;
-        if (tokenRkbInterval) {
-          clearInterval(tokenRkbInterval);
-          tokenRkbInterval = null;
-          sendTokenMessage(threadID, "🛑 Token RKB band hogya");
-        } else {
-          sendTokenMessage(threadID, "😒 Token RKB chal hi nahi raha tha");
+          const msg = input || "🔥 RKB ACTIVE 🔥";
+          api.sendMessage(msg, targetGroup, (err) => {
+            if (err) {
+              console.error("❌ Error sending to target group:", err.message);
+              return api.sendMessage("❌ Message bhejne me error aaya", threadID);
+            }
+            api.sendMessage(`📩 Msg sent to target group (${targetGroup})`, threadID);
+          });
+        } catch (e) {
+          console.error("❌ Error in /t-rkb:", e.message);
+          api.sendMessage("❌ T-rkb command fail", threadID);
         }
       }
 
@@ -434,7 +379,6 @@ login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, 
     }
   });
 
-  // UID target loop system (original)
   const startUidTargetLoop = (api) => {
     if (!fs.existsSync("uidtarget.txt")) return console.log("❌ uidtarget.txt not found");
 
