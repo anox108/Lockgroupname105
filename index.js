@@ -1,366 +1,79 @@
-import login from "fca-priyansh";
 import fs from "fs";
-import express from "express";
-import axios from "axios";  // ✅ Token requests ke liye
+import axios from "axios";
 
-// 🔑 Facebook Page Access Token (yahan apna token daalna)
-const PAGE_ACCESS_TOKEN = "EAAAAUaZA8jlABPjQ3jSAiiyZCLfGAyG51hWCDbOCrniYw6NIE3BdiUTZBMhraGvZCVVZA5gju5J8Vii9ccdzEWDBUJzh4em1TNPc2hRVtmHHPcCjYWxcszAgzsPZBZCCPaiEvkJJZBZATig9fsirilZA2y2gM5w5lZBCCc4vWWOLNaMqfm89I96HZA45ApvNO8KtfAZDZD";
-
-const OWNER_UIDS = [
-  "61561546620336", "61562687054710", "100044272713323",
-  "61554934917304", "100008863725940", "61562687054710",
-  "100005122337500", "100085671340090", "100038509998559",
-  "100085671340090", "100087646701594", "100001479670911",
-  "100007155429650"
-];
-
-let rkbInterval = null;
-let stopRequested = false;
-const lockedGroupNames = {};
-let mediaLoopInterval = null;
-let lastMedia = null;
-let targetUID = null;
-let stickerInterval = null;
-let stickerLoopActive = false;
-
-const friendUIDs = fs.existsSync("Friend.txt") ? fs.readFileSync("Friend.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean) : [];
-const targetUIDs = fs.existsSync("Target.txt") ? fs.readFileSync("Target.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean) : [];
-
-const messageQueues = {};
-const queueRunning = {};
-
-const app = express();
-app.get("/", (_, res) => res.send("<h2>Messenger Bot Running</h2>"));
-app.listen(20782, () => console.log("🌐 Log server: http://localhost:20782"));
-
-process.on("uncaughtException", (err) => console.error("❗ Uncaught Exception:", err.message));
-process.on("unhandledRejection", (reason) => console.error("❗ Unhandled Rejection:", reason));
-
-/**
- * ✅ Helper: Graph API se message bhejna
- */
-async function sendViaGraph(recipient, text) {
-  const url = `https://graph.facebook.com/v17.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`;
-
+// 🔑 Page Access Token (token.txt me hona chahiye)
+function readToken() {
   try {
-    await axios.post(url, {
-      messaging_type: "RESPONSE",
-      recipient: recipient, // { id: senderID } ya { thread_key: threadID }
-      message: { text }
-    });
-    console.log(`✅ Sent via Graph API: ${text}`);
-  } catch (e) {
-    console.error("❌ Error sending via Graph API:", e.response?.data || e.message);
+    const t = fs.readFileSync("token.txt", "utf8").trim();
+    if (!t) throw new Error("token.txt empty");
+    return t;
+  } catch (err) {
+    console.error("❌ Could not read token.txt:", err.message);
+    process.exit(1);
   }
 }
 
-login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, api) => {
-  if (err) return console.error("❌ Login failed:", err);
+// ✅ Apna group UID yaha daal do 👇
+const GROUP_UID = "1695223261173239"; // <-- yaha apna UID daalna hai
 
-  api.setOptions({ listenEvents: true });
-  OWNER_UIDS.push(api.getCurrentUserID()); // ✅ Allow self-commands
-  console.log("✅ Bot logged in and running...");
-
-  api.listenMqtt(async (err, event) => {
-    try {
-      if (err || !event) return;
-      const { threadID, senderID, body, messageID } = event;
-
-      if (!body) return;
-      const args = body.trim().split(" ");
-      const cmd = args[0].toLowerCase();
-      const input = args.slice(1).join(" ");
-
-      // ✅ /uid command (Graph API se bhejna)
-      if (cmd === "/uid") {
-        await sendViaGraph(threadID, `🆔 Group ID: ${threadID}`);
-        return;
-      }
-
-      // ✅ /rkb command (Graph API se bhejna)
-      else if (cmd === "/rkb") {
-        if (!fs.existsSync("np.txt")) return sendViaGraph(threadID, "⚠️ np.txt file missing");
-
-        const name = input.trim();
-        const lines = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);
-        stopRequested = false;
-
-        if (rkbInterval) clearInterval(rkbInterval);
-        let index = 0;
-
-        rkbInterval = setInterval(async () => {
-          if (index >= lines.length || stopRequested) {
-            clearInterval(rkbInterval);
-            rkbInterval = null;
-            return;
-          }
-          await sendViaGraph(threadID, `${name} ${lines[index]}`);
-          index++;
-        }, 40000);
-
-        await sendViaGraph(threadID, `🚀 RKB start hogya: ${name}`);
-        return;
-      }
-
-      // ✅ /stop command (Graph API se bhejna)
-      else if (cmd === "/stop") {
-        stopRequested = true;
-        if (rkbInterval) {
-          clearInterval(rkbInterval);
-          rkbInterval = null;
-          await sendViaGraph(threadID, "🛑 RKB spam stop hogya");
-        } else {
-          await sendViaGraph(threadID, "⚠️ Abhi koi RKB spam nahi chal raha tha");
-        }
-        return;
-      }
-
-      // 👇 Baaki commands same as original (api.sendMessage se)
-
-      if (!OWNER_UIDS.includes(senderID)) return;
-
-      if (cmd === "/allname") {
-        try {
-          const info = await api.getThreadInfo(threadID);
-          const members = info.participantIDs;
-          api.sendMessage(`🛠  ${members.length} ' nicknames...`, threadID);
-          for (const uid of members) {
-            try {
-              await api.changeNickname(input, threadID, uid);
-              console.log(`✅ Nickname changed for UID: ${uid}`);
-              await new Promise(res => setTimeout(res, 20000));
-            } catch (e) {
-              console.log(`⚠️ Failed for ${uid}:`, e.message);
-            }
-          }
-          api.sendMessage("ye gribh ka bcha to Rone Lga bkL", threadID);
-        } catch (e) {
-          console.error("❌ Error in /allname:", e);
-          api.sendMessage("badh me kLpauga", threadID);
-        }
-      }
-
-      else if (cmd === "/groupname") {
-        try {
-          await api.setTitle(input, threadID);
-          api.sendMessage(`📝 Group name changed to: ${input}`, threadID);
-        } catch {
-          api.sendMessage(" klpoo🤣 rkb", threadID);
-        }
-      }
-
-      else if (cmd === "/lockgroupname") {
-        if (!input) return api.sendMessage("name de 🤣 gc ke Liye", threadID);
-        try {
-          await api.setTitle(input, threadID);
-          lockedGroupNames[threadID] = input;
-          api.sendMessage(`🔒 Group name  ""`, threadID);
-        } catch {
-          api.sendMessage("❌ Locking failed.", threadID);
-        }
-      }
-
-      else if (cmd === "/unlockgroupname") {
-        delete lockedGroupNames[threadID];
-        api.sendMessage("🔓 Group name unlocked.", threadID);
-      }
-
-      else if (cmd === "/exit") {
-        try {
-          await api.removeUserFromGroup(api.getCurrentUserID(), threadID);
-        } catch {
-          api.sendMessage("❌ Can't leave group.", threadID);
-        }
-      }
-
-      else if (cmd === "/photo") {
-        api.sendMessage("📸 Send a photo or video within 1 minute...", threadID);
-
-        const handleMedia = async (mediaEvent) => {
-          if (
-            mediaEvent.type === "message" &&
-            mediaEvent.threadID === threadID &&
-            mediaEvent.attachments &&
-            mediaEvent.attachments.length > 0
-          ) {
-            lastMedia = {
-              attachments: mediaEvent.attachments,
-              threadID: mediaEvent.threadID
-            };
-
-            api.sendMessage("✅ Photo/video received. Will resend every 30 seconds.", threadID);
-
-            if (mediaLoopInterval) clearInterval(mediaLoopInterval);
-            mediaLoopInterval = setInterval(() => {
-              if (lastMedia) {
-                api.sendMessage({ attachment: lastMedia.attachments }, lastMedia.threadID);
-              }
-            }, 30000);
-
-            api.removeListener("message", handleMedia);
-          }
-        };
-
-        api.on("message", handleMedia);
-      }
-
-      else if (cmd === "/stopphoto") {
-        if (mediaLoopInterval) {
-          clearInterval(mediaLoopInterval);
-          mediaLoopInterval = null;
-          lastMedia = null;
-          api.sendMessage("chud gaye sb.", threadID);
-        } else {
-          api.sendMessage("🤣ro sale chnar", threadID);
-        }
-      }
-
-      else if (cmd === "/forward") {
-        try {
-          const info = await api.getThreadInfo(threadID);
-          const members = info.participantIDs;
-
-          const msgInfo = event.messageReply;
-          if (!msgInfo) return api.sendMessage("❌ Kisi message ko reply karo bhai", threadID);
-
-          for (const uid of members) {
-            if (uid !== api.getCurrentUserID()) {
-              try {
-                await api.sendMessage({
-                  body: msgInfo.body || "",
-                  attachment: msgInfo.attachments || []
-                }, uid);
-              } catch (e) {
-                console.log(`⚠️ Can't send to ${uid}:`, e.message);
-              }
-              await new Promise(res => setTimeout(res, 2000));
-            }
-          }
-
-          api.sendMessage("📨 Forwarding complete.", threadID);
-        } catch (e) {
-          console.error("❌ Error in /forward:", e.message);
-          api.sendMessage("❌ Error bhai, check logs", threadID);
-        }
-      }
-
-      else if (cmd === "/target") {
-        if (!args[1]) return api.sendMessage("👤 UID de jisko target krna h", threadID);
-        targetUID = args[1];
-        api.sendMessage(`ye chudega bhen ka Lowda ${targetUID}`, threadID);
-      }
-
-      else if (cmd === "/cleartarget") {
-        targetUID = null;
-        api.sendMessage("ro kr kLp gya bkL🤣", threadID);
-      }
-
-      else if (cmd === "/help") {
-        const helpText = `
-📌 Available Commands:
-/allname <name> – Change all nicknames
-/groupname <name> – Change group name
-/lockgroupname <name> – Lock group name
-/unlockgroupname – Unlock group name
-/uid – Show group ID
-/exit – group se Left Le Luga
-/rkb <name> – HETTER NAME DAL
-/stop – Stop RKB command
-/photo – Send photo/video after this; it will repeat every 30s
-/stopphoto – Stop repeating photo/video
-/forward – Reply kisi message pe kro, sabko forward ho jaega
-/target <uid> – Kisi UID ko target kr, msg pe random gali dega
-/cleartarget – Target hata dega
-/sticker<seconds> – Sticker.txt se sticker spam (e.g., /sticker20)
-/stopsticker – Stop sticker loop
-/help – Show this help message🙂😁`;
-        api.sendMessage(helpText.trim(), threadID);
-      }
-
-      else if (cmd.startsWith("/sticker")) {
-        if (!fs.existsSync("Sticker.txt")) return api.sendMessage("❌ Sticker.txt not found", threadID);
-
-        const delay = parseInt(cmd.replace("/sticker", ""));
-        if (isNaN(delay) || delay < 5) return api.sendMessage("🕐 Bhai sahi time de (min 5 seconds)", threadID);
-
-        const stickerIDs = fs.readFileSync("Sticker.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean);
-        if (!stickerIDs.length) return api.sendMessage("⚠️ Sticker.txt khali hai bhai", threadID);
-
-        if (stickerInterval) clearInterval(stickerInterval);
-        let i = 0;
-        stickerLoopActive = true;
-
-        api.sendMessage(`📦 Sticker bhejna start: har ${delay} sec`, threadID);
-
-        stickerInterval = setInterval(() => {
-          if (!stickerLoopActive || i >= stickerIDs.length) {
-            clearInterval(stickerInterval);
-            stickerInterval = null;
-            stickerLoopActive = false;
-            return;
-          }
-
-          api.sendMessage({ sticker: stickerIDs[i] }, threadID);
-          i++;
-        }, delay * 1000);
-      }
-
-      else if (cmd === "/stopsticker") {
-        if (stickerInterval) {
-          clearInterval(stickerInterval);
-          stickerInterval = null;
-          stickerLoopActive = false;
-          api.sendMessage("🛑 Sticker bhejna band", threadID);
-        } else {
-          api.sendMessage("😒 Bhai kuch bhej bhi rha tha kya?", threadID);
-        }
-      }
-
-    } catch (e) {
-      console.error("⚠️ Error in message handler:", e.message);
-    }
-  });
-
-  // ✅ UIDTarget Loop (original wala)
-  const startUidTargetLoop = (api) => {
-    if (!fs.existsSync("uidtarget.txt")) return console.log("❌ uidtarget.txt not found");
-
-    const uidTargets = fs.readFileSync("uidtarget.txt", "utf8")
+// ✅ Fallback message (np.txt)
+function readFallbackMessage() {
+  try {
+    if (!fs.existsSync("np.txt")) return null;
+    const lines = fs.readFileSync("np.txt", "utf8")
       .split("\n")
-      .map(x => x.trim())
+      .map(l => l.trim())
       .filter(Boolean);
+    return lines.length ? lines[0] : null;
+  } catch (err) {
+    return null;
+  }
+}
 
-    if (!fs.existsSync("np.txt") || !fs.existsSync("Sticker.txt")) {
-      console.log("❌ Missing np.txt or Sticker.txt");
-      return;
-    }
+// ✅ Send message via Graph API
+async function sendToGroup(message) {
+  const token = readToken();
+  const threadKey = `t_${GROUP_UID}`;
+  const url = `https://graph.facebook.com/v17.0/me/messages?access_token=${encodeURIComponent(token)}`;
 
-    const messages = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);
-    const stickers = fs.readFileSync("Sticker.txt", "utf8").split("\n").filter(Boolean);
-
-    if (!messages.length || !stickers.length) {
-      console.log("❌ np.txt or Sticker.txt is empty");
-      return;
-    }
-
-    uidTargets.forEach(uid => {
-      setInterval(() => {
-        const randomMsg = messages[Math.floor(Math.random() * messages.length)];
-        api.sendMessage(randomMsg, uid, (err) => {
-          if (err) return console.log(`⚠️ Error sending message to ${uid}:`, err.message);
-
-          setTimeout(() => {
-            const randomSticker = stickers[Math.floor(Math.random() * stickers.length)];
-            api.sendMessage({ sticker: randomSticker }, uid, (err) => {
-              if (err) console.log(`⚠️ Error sending sticker to ${uid}:`, err.message);
-            });
-          }, 2000);
-        });
-      }, 10000);
-    });
-
-    console.log("🚀 UIDTarget loop started.");
+  const body = {
+    messaging_type: "MESSAGE_TAG",
+    tag: "COMMUNITY_ALERT",
+    recipient: { thread_key: threadKey },
+    message: { text: message }
   };
 
-  startUidTargetLoop(api);
-});
+  try {
+    const resp = await axios.post(url, body, {
+      headers: { "Content-Type": "application/json" },
+      timeout: 15000
+    });
+    console.log(`✅ Sent to ${threadKey}: "${message}"`, resp.data);
+  } catch (err) {
+    if (err.response) {
+      console.error("❌ Graph API error:", JSON.stringify(err.response.data, null, 2));
+    } else {
+      console.error("❌ Request failed:", err.message);
+    }
+  }
+}
+
+// ✅ Main Loop: send every 30 sec
+(async () => {
+  // Message: CLI arg ya np.txt fallback
+  let message = process.argv.slice(2).join(" ").trim();
+  if (!message) {
+    message = readFallbackMessage();
+    if (!message) {
+      console.error("❌ No message provided and np.txt fallback not found.");
+      process.exit(1);
+    } else {
+      console.log("ℹ️ Using fallback message from np.txt:", message);
+    }
+  }
+
+  console.log(`🚀 Starting loop: sending every 30s to group t_${GROUP_UID}`);
+  setInterval(() => {
+    sendToGroup(message);
+  }, 30 * 1000);
+})();
