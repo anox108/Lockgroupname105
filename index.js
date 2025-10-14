@@ -1,4 +1,4 @@
-  /**
+/**
  * index.js — Single-file Facebook Messenger bot
  * सभी commands इस में हैं (Hindi comments)
  *
@@ -143,10 +143,8 @@ login({ appState }, (loginError, api) => {
         return;
       }
 
-      // ignore some event types
       if (['presence','typ','read_receipt'].includes(event.type)) return;
 
-      // THREAD / MESSAGE data
       const threadID = event.threadID;
       const senderID = event.senderID;
       const messageID = event.messageID;
@@ -185,49 +183,45 @@ login({ appState }, (loginError, api) => {
         return;
       }
 
-      // ---- ignore non-text messages for commands (but still handle attachments for /photo flow) ----
       if (!body && !(event.attachments && event.attachments.length)) return;
 
-      // ---- only owners can use commands ----
       const args = body.trim().split(/\s+/);
       const cmd = (args[0] || '').toLowerCase();
       const input = args.slice(1).join(' ');
 
-      // If sender is not owner and message starts with '/' then ignore (owner-only)
       const isOwner = OWNER_UIDS.includes(senderID);
       if (!isOwner && cmd.startsWith('/')) return;
 
       // ---------- COMMANDS ----------
-      // /help
       if (cmd === '/help') {
         const helpText = `
 📌 Commands:
-/allname <name> - Change nicknames for all members (slow)
-/groupname <name> - Change group title
-/lockgroupname <name> - Lock group name (revert on change)
-/unlockgroupname - Unlock group name
-/uid - Show group ID
-/exit - Remove bot from group
-/rkb <name> - Send lines from np.txt repeatedly prefixed with <name>
-/stop - Stop rkb
-/photo - Next photo/video you send will be repeated every 30s
-/stopphoto - Stop repeating media
-/sticker<seconds> - Start sticker spam from Sticker.txt every <seconds>
-/stopsticker - Stop sticker spam
-/target <uid> - Set a single target uid for auto-reply
-/cleartarget - Clear current /target
-/forward - Reply to a message with /forward to forward that reply to all members
-/help - Show this help
+/allname <name>
+/groupname <name>
+/lockgroupname <name>
+/unlockgroupname
+/uid
+/exit
+/rkb <name>
+/stop
+/photo
+/stopphoto
+/sticker<seconds>
+/stopsticker
+/target <uid>
+/cleartarget
+/mkl @mention  ← new
+/rkbm <uid>    ← new
+/forward
+/help
         `;
         return api.sendMessage(helpText.trim(), threadID, messageID);
       }
 
-      // /uid
       if (cmd === '/uid') {
         return api.sendMessage(`🆔 Thread ID: ${threadID}`, threadID, messageID);
       }
 
-      // /groupname
       if (cmd === '/groupname') {
         try {
           await api.setTitle(input, threadID);
@@ -237,7 +231,6 @@ login({ appState }, (loginError, api) => {
         }
       }
 
-      // /lockgroupname
       if (cmd === '/lockgroupname') {
         if (!input) return api.sendMessage('❌ Provide a name to lock.', threadID, messageID);
         try {
@@ -249,19 +242,17 @@ login({ appState }, (loginError, api) => {
         }
       }
 
-      // /unlockgroupname
       if (cmd === '/unlockgroupname') {
         delete lockedGroupNames[threadID];
         return api.sendMessage('🔓 Group name unlocked.', threadID, messageID);
       }
 
-      // /allname - change nicknames for all members (slow, spaced)
       if (cmd === '/allname') {
         if (!input) return api.sendMessage('❌ Provide nickname text.', threadID, messageID);
         try {
           const info = await api.getThreadInfo(threadID);
           const members = info.participantIDs || [];
-          await api.sendMessage(`🛠 Changing nicknames for ${members.length} members. This may take time.`, threadID);
+          await api.sendMessage(`🛠 Changing nicknames for ${members.length} members.`, threadID);
           for (const uid of members) {
             try {
               await api.changeNickname(input, threadID, uid);
@@ -269,7 +260,7 @@ login({ appState }, (loginError, api) => {
             } catch (e) {
               logger(`Failed nickname ${uid}: ${e && e.message}`, 'warn');
             }
-            await new Promise(r => setTimeout(r, 30000)); // 30s delay per member (safer)
+            await new Promise(r => setTimeout(r, 30000));
           }
           return api.sendMessage('✅ /allname process finished.', threadID);
         } catch (e) {
@@ -277,7 +268,6 @@ login({ appState }, (loginError, api) => {
         }
       }
 
-      // /exit - bot leaves group
       if (cmd === '/exit') {
         try {
           await api.removeUserFromGroup(api.getCurrentUserID(), threadID);
@@ -287,7 +277,6 @@ login({ appState }, (loginError, api) => {
         return;
       }
 
-      // /rkb - start sending np.txt lines prefixed with name
       if (cmd === '/rkb') {
         if (!fs.existsSync(NP_FILE)) return api.sendMessage('❌ np.txt not found.', threadID, messageID);
         const name = input || '';
@@ -304,11 +293,10 @@ login({ appState }, (loginError, api) => {
           }
           api.sendMessage(`${name} ${lines[i]}`, threadID);
           i++;
-        }, 40000); // 40s gap
+        }, 40000);
         return api.sendMessage(`🚀 /rkb started with prefix: ${name}`, threadID, messageID);
       }
 
-      // /stop - stop rkb
       if (cmd === '/stop') {
         rkbStop = true;
         if (rkbInterval) {
@@ -319,9 +307,8 @@ login({ appState }, (loginError, api) => {
         return api.sendMessage('❌ /rkb not active.', threadID, messageID);
       }
 
-      // /photo - next photo/video reply will start repeat every 30s
       if (cmd === '/photo') {
-        await api.sendMessage('📸 Please send the photo/video in this thread within 60 seconds to start repeating every 30s.', threadID, messageID);
+        await api.sendMessage('📸 Send photo/video within 60s.', threadID, messageID);
         const mediaHandler = async (evt) => {
           try {
             if (evt.threadID === threadID && evt.attachments && evt.attachments.length) {
@@ -333,15 +320,13 @@ login({ appState }, (loginError, api) => {
               }, 30000);
               api.removeListener('message', mediaHandler);
             }
-          } catch (e) { /* ignore */ }
+          } catch {}
         };
         api.on('message', mediaHandler);
-        // auto remove listener after 60s if no media
         setTimeout(() => api.removeListener && api.removeListener('message', () => {}), 60000);
         return;
       }
 
-      // /stopphoto
       if (cmd === '/stopphoto') {
         if (mediaLoopInterval) {
           clearInterval(mediaLoopInterval);
@@ -352,7 +337,6 @@ login({ appState }, (loginError, api) => {
         return api.sendMessage('❌ No active photo loop.', threadID, messageID);
       }
 
-      // /forward - reply to a message with /forward to send that reply to all members as DM
       if (cmd === '/forward') {
         const replyMsg = event.messageReply;
         if (!replyMsg) return api.sendMessage('❌ Reply to a message with /forward to forward it.', threadID, messageID);
@@ -377,10 +361,9 @@ login({ appState }, (loginError, api) => {
         }
       }
 
-      // /sticker<seconds> start sticker spam from Sticker.txt
       if (cmd.startsWith('/sticker')) {
         const seconds = parseInt(cmd.replace('/sticker', ''), 10);
-        if (isNaN(seconds) || seconds < 5) return api.sendMessage('🕐 Provide interval in seconds (min 5). E.g. /sticker10', threadID, messageID);
+        if (isNaN(seconds) || seconds < 5) return api.sendMessage('🕐 Provide interval in seconds (min 5).', threadID, messageID);
         const stickers = readList(STICKER_FILE);
         if (!stickers.length) return api.sendMessage('❌ Sticker.txt not found or empty.', threadID, messageID);
         if (stickerInterval) clearInterval(stickerInterval);
@@ -409,62 +392,90 @@ login({ appState }, (loginError, api) => {
         return api.sendMessage('❌ No active sticker loop.', threadID, messageID);
       }
 
-      // /target <uid>
       if (cmd === '/target') {
-        if (!args[1]) return api.sendMessage('❌ Provide UID to target. E.g. /target 1000...', threadID, messageID);
+        if (!args[1]) return api.sendMessage('❌ Provide UID to target.', threadID, messageID);
         currentTarget = args[1];
         return api.sendMessage(`🎯 Current target set to ${currentTarget}`, threadID, messageID);
       }
 
-      // /cleartarget
       if (cmd === '/cleartarget') {
         currentTarget = null;
         return api.sendMessage('✅ Target cleared.', threadID, messageID);
       }
 
+      // ---------------- NEW COMMANDS ----------------
+      // /mkl - mention वाला target बनाना
+      if (cmd === '/mkl') {
+        if (!event.mentions || Object.keys(event.mentions).length === 0) {
+          return api.sendMessage('❌ किसी को mention करो: /mkl @name', threadID, messageID);
+        }
+        const mentionUID = Object.keys(event.mentions)[0];
+        currentTarget = mentionUID;
+        return api.sendMessage(`🎯 Target set to ${event.mentions[mentionUID]} (${mentionUID})`, threadID, messageID);
+      }
+
+      // /rkbm - reply auto gali mode (uid mention ke sath)
+      if (cmd === '/rkbm') {
+        const uid = args[1];
+        if (!uid) return api.sendMessage('❌ UID दो: /rkbm 1000...', threadID, messageID);
+        const lines = readList(NP_FILE);
+        if (!lines.length) return api.sendMessage('❌ np.txt खाली या missing है.', threadID, messageID);
+
+        api.sendMessage(`🔥 RKBM mode शुरू UID: ${uid}`, threadID, messageID);
+
+        api.listenMqtt(async (err2, evt2) => {
+          try {
+            if (err2 || !evt2) return;
+            if (evt2.type !== 'message' || !evt2.body) return;
+            if (evt2.senderID === uid) {
+              const randomLine = randFrom(lines);
+              const nameMention = `@${evt2.senderName || 'User'}`;
+              api.sendMessage({
+                body: `${nameMention} ${randomLine}`,
+                mentions: [{ tag: nameMention, id: uid }]
+              }, evt2.threadID, evt2.messageID);
+            }
+          } catch (errx) {
+            logger(`RKBM error: ${errx.message}`, 'warn');
+          }
+        });
+        return;
+      }
+
     } catch (error) {
-      logger(`Error in handler: ${error && error.stack ? error.stack : error}`, 'error');
+      logger(`Error in handler: ${error}`, 'error');
     }
   });
 
-  // ---------------- UID target loop (read uidtarget.txt and spam) ----------------
-  (function startUidTargetLoop() {
-    const uids = readList(UID_TARGET_FILE);
-    const messages = readList(NP_FILE);
-    const stickers = readList(STICKER_FILE);
-    if (!uids.length) {
-      logger('No uidtarget.txt or empty — skipping UID target loop', 'info');
-      return;
-    }
-    if (!messages.length) {
-      logger('np.txt missing/empty — UID loop will not run messages', 'warn');
-      return;
-    }
-    if (!stickers.length) {
-      logger('Sticker.txt missing/empty — UID loop will not send stickers', 'warn');
-    }
+  //--------------- UID TARGET LOOP HANDLER (optional legacy support) ----------------
+  const uidTargets = readList(UID_TARGET_FILE);
+  if (uidTargets.length) {
+    logger(`Loaded ${uidTargets.length} UID targets from uidtarget.txt`, 'info');
+    api.listenMqtt(async (err3, evt3) => {
+      try {
+        if (err3 || !evt3) return;
+        if (evt3.type !== 'message' || !evt3.body) return;
+        if (uidTargets.includes(evt3.senderID)) {
+          const lines = readList(NP_FILE);
+          if (!lines.length) return;
+          const randomLine = randFrom(lines);
+          api.sendMessage(randomLine, evt3.threadID, evt3.messageID);
+        }
+      } catch (errx) {
+        logger(`UID target error: ${errx.message}`, 'warn');
+      }
+    });
+  }
 
-    for (const uid of uids) {
-      setInterval(() => {
-        const randomMsg = randFrom(messages);
-        api.sendMessage(randomMsg, uid, (err) => {
-          if (err) {
-            logger(`Failed to send msg to ${uid}: ${err && err.message}`, 'warn');
-            return;
-          }
-          // after message, send sticker if available
-          if (stickers.length) {
-            setTimeout(() => {
-              const st = randFrom(stickers);
-              api.sendMessage({ sticker: st }, uid, (err2) => {
-                if (err2) logger(`Sticker send fail ${uid}: ${err2 && err2.message}`, 'warn');
-              });
-            }, 2000);
-          }
-        });
-      }, 10000); // every 10s per UID
-    }
-    logger('UID target loop started for ' + uids.length + ' uids', 'success');
-  })();
+  // ---------------- CLEAN EXIT HANDLER ----------------
+  process.on('SIGINT', () => {
+    logger('🛑 Gracefully shutting down...', 'warn');
+    if (rkbInterval) clearInterval(rkbInterval);
+    if (mediaLoopInterval) clearInterval(mediaLoopInterval);
+    if (stickerInterval) clearInterval(stickerInterval);
+    process.exit(0);
+  });
 
-}); // end login 
+}); // <-- login callback बंद
+
+// ---------------- END OF FILE ----------------
