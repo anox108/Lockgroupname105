@@ -22,7 +22,7 @@ const APPSTATE_PATH = path.join(process.cwd(), 'appstate.json');
 // Owners / admin UIDs — आप अपनी list यहाँ रखें
 const OWNER_UIDS = [
   /*  UIDs -- बदलें अपनी IDs से */
-  "100067335306511",
+  "100001479670911",
   "100001479670911",
   "100002357867932"
 ];
