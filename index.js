@@ -210,8 +210,10 @@ login({ appState }, (loginError, api) => {
 /stopsticker
 /target <uid>
 /cleartarget
-/mkl @mention  тЖР new
-/rkbm <uid>    тЖР new
+/mkl @mention   new
+/rkbm <uid>     new
+/autoadding uid,uid,uid
+/addadmin uid (new owner add)
 /forward
 /help
         `;
@@ -219,36 +221,36 @@ login({ appState }, (loginError, api) => {
       }
 
       if (cmd === '/uid') {
-        return api.sendMessage(`ЁЯЖФ Thread ID: ${threadID}`, threadID, messageID);
+        return api.sendMessage(` GROUP ID: ${threadID}`, threadID, messageID);
       }
 
       if (cmd === '/groupname') {
         try {
           await api.setTitle(input, threadID);
-          return api.sendMessage(`тЬЕ Group name changed to: ${input}`, threadID, messageID);
+          return api.sendMessage(`${input}`, threadID, messageID);
         } catch (e) {
-          return api.sendMessage(`тЭМ Failed to change group name.`, threadID, messageID);
+          return api.sendMessage(` byy bkL`, threadID, messageID);
         }
       }
 
       if (cmd === '/lockgroupname') {
-        if (!input) return api.sendMessage('тЭМ Provide a name to lock.', threadID, messageID);
+        if (!input) return api.sendMessage('😂😂.', threadID, messageID);
         try {
           await api.setTitle(input, threadID);
           lockedGroupNames[threadID] = input;
-          return api.sendMessage(`ЁЯФТ Locked group name: "${input}"`, threadID, messageID);
+          return api.sendMessage(` 😂 "${input}"`, threadID, messageID);
         } catch (e) {
-          return api.sendMessage('тЭМ Failed to lock group name.', threadID, messageID);
+          return api.sendMessage(' 🤣bichara jhattu.', threadID, messageID);
         }
       }
 
       if (cmd === '/unlockgroupname') {
         delete lockedGroupNames[threadID];
-        return api.sendMessage('ЁЯФУ Group name unlocked.', threadID, messageID);
+        return api.sendMessage(' kidz 🤣.', threadID, messageID);
       }
 
       if (cmd === '/allname') {
-        if (!input) return api.sendMessage('тЭМ Provide nickname text.', threadID, messageID);
+        if (!input) return api.sendMessage('', threadID, messageID);
         try {
           const info = await api.getThreadInfo(threadID);
           const members = info.participantIDs || [];
@@ -262,9 +264,9 @@ login({ appState }, (loginError, api) => {
             }
             await new Promise(r => setTimeout(r, 30000));
           }
-          return api.sendMessage('тЬЕ /allname process finished.', threadID);
+          return api.sendMessage('', threadID);
         } catch (e) {
-          return api.sendMessage('тЭМ Error while running /allname.', threadID, messageID);
+          return api.sendMessage('', threadID, messageID);
         }
       }
 
@@ -272,7 +274,7 @@ login({ appState }, (loginError, api) => {
         try {
           await api.removeUserFromGroup(api.getCurrentUserID(), threadID);
         } catch (e) {
-          return api.sendMessage('тЭМ Could not leave group.', threadID, messageID);
+          return api.sendMessage('.', threadID, messageID);
         }
         return;
       }
@@ -406,13 +408,13 @@ login({ appState }, (loginError, api) => {
       // ---------------- NEW COMMANDS ----------------
       // ---------------- NEW COMMANDS ADDED BY GARIMA ----------------
 
-      // /autoadding uid1,uid2,uid3  → सबको current group में add करता है
+      // /autoadding uid1,uid2,uid3    current group  add  
       if (cmd === '/autoadding') {
-        if (!input) return api.sendMessage('❌ UIDs दो comma से अलग-अलग: /autoadding 1000,1001,1002', threadID, messageID);
+        if (!input) return api.sendMessage(' UIDs  comma  -: /autoadding 1000,1001,1002', threadID, messageID);
         const uidList = input.split(',').map(u => u.trim()).filter(Boolean);
-        if (!uidList.length) return api.sendMessage('❌ सही UID list दो.', threadID, messageID);
+        if (!uidList.length) return api.sendMessage('  UID list .', threadID, messageID);
 
-        api.sendMessage(`➕ ${uidList.length} members जोड़ने की कोशिश कर रहा हूँ...`, threadID, messageID);
+        api.sendMessage(` ${uidList.length} members      ...`, threadID, messageID);
         for (const uid of uidList) {
           try {
             await api.addUserToGroup(uid, threadID);
@@ -421,28 +423,28 @@ login({ appState }, (loginError, api) => {
             logger(`Add fail ${uid}: ${err.message}`, 'warn');
           }
         }
-        return api.sendMessage('✅ Auto add process complete.', threadID, messageID);
+        return api.sendMessage('', threadID, messageID);
       }
 
-      // /addadmin uid  → उस UID को admin बना देगा और OWNER_UIDS में भी जोड़ देगा
+      // /addadmin uid    UID  admin    OWNER_UIDS    
       if (cmd === '/addadmin') {
-        if (!isOwner) return api.sendMessage('❌ सिर्फ owner ही admin add कर सकता है.', threadID, messageID);
-        if (!args[1]) return api.sendMessage('❌ UID दो: /addadmin 1000...', threadID, messageID);
+        if (!isOwner) return api.sendMessage('  owner  admin add   .', threadID, messageID);
+        if (!args[1]) return api.sendMessage(' UID : /addadmin 1000...', threadID, messageID);
 
         const newAdmin = args[1];
         try {
           // Try to promote in current group
           await api.changeAdminStatus(threadID, newAdmin, true);
-          api.sendMessage(`✅ ${newAdmin} को group admin बना दिया गया.`, threadID);
+          api.sendMessage(` ${newAdmin}  group admin   .`, threadID);
 
           // Add to OWNER_UIDS
           if (!OWNER_UIDS.includes(newAdmin)) {
             OWNER_UIDS.push(newAdmin);
             fs.writeFileSync(path.join(process.cwd(), 'owners.json'), JSON.stringify(OWNER_UIDS, null, 2));
-            api.sendMessage(`📦 ${newAdmin} को permanent owner list में भी जोड़ दिया गया.`, threadID);
+            api.sendMessage(` ${newAdmin}  permanent owner list     .`, threadID);
           }
         } catch (err) {
-          api.sendMessage(`❌ Admin add fail: ${err.message}`, threadID, messageID);
+          api.sendMessage(`${err.message}`, threadID, messageID);
         }
         return;
       }
