@@ -1,387 +1,526 @@
-import login from "fca-priyansh";
-import fs from "fs";
-import express from "express";
+/**
+ * index.js тАФ Single-file Facebook Messenger bot
+ * рд╕рднреА commands рдЗрд╕ рдореЗрдВ рд╣реИрдВ (Hindi comments)
+ *
+ * Requirements:
+ *  - npm i fca-smart-shankar axios express fs-extra moment-timezone
+ *  - Files in same folder: appstate.json, np.txt, Target.txt, uidtarget.txt, Sticker.txt (optional), Friend.txt (optional), index.html (optional)
+ */
 
-const OWNER_UIDS = ["100087411382804", "61562687054710", "100024447049530", "61577620543563", "100080590835028", "100080590835028", "61576919932882", "100005122337500", "100082811408144", "100085884529708", "100038509998559", "100085671340090", "100087646701594", "100005122337500", "100031011381551", "100001808342073"];
+const fs = require('fs-extra');
+const path = require('path');
+const express = require('express');
+const moment = require('moment-timezone');
+const axios = require('axios');
+const login = require('fca-smart-shankar'); // make sure installed
+const logger = require('./utils/log') || console.log; // рдЕрдЧрд░ custom logger рдирд╣реАрдВ рд╣реИ рддреЛ console.log use рд╣реЛрдЧрд╛
+
+// ---------------- Config & Globals ----------------
+const PORT = process.env.PORT || 8080;
+const APPSTATE_PATH = path.join(process.cwd(), 'appstate.json');
+
+// Owners / admin UIDs тАФ рдЖрдк рдЕрдкрдиреА list рдпрд╣рд╛рдБ рд░рдЦреЗрдВ
+const OWNER_UIDS = [
+  /*  UIDs -- рдмрджрд▓реЗрдВ рдЕрдкрдиреА IDs рд╕реЗ */
+  "100087411382804",
+  "100001479670911",
+  "100002357867932"
+];
+
+// рдлрд╝рд╛рдЗрд▓-рд░рд┐рд▓реЗрдЯреЗрдб lists
+const NP_FILE = path.join(process.cwd(), 'np.txt');          // random messages
+const TARGET_FILE = path.join(process.cwd(), 'Target.txt'); // single-line targets (legacy)
+const UID_TARGET_FILE = path.join(process.cwd(), 'uidtarget.txt'); // uid loops
+const STICKER_FILE = path.join(process.cwd(), 'Sticker.txt');
+const FRIEND_FILE = path.join(process.cwd(), 'Friend.txt');
+
+// Runtime state
+let lockedGroupNames = {}; // { threadID: lockedName }
 let rkbInterval = null;
-let stopRequested = false;
-const lockedGroupNames = {};
+let rkbStop = false;
 let mediaLoopInterval = null;
 let lastMedia = null;
-let targetUID = null;
 let stickerInterval = null;
 let stickerLoopActive = false;
+let currentTarget = null; // /target set via command
 
-const friendUIDs = fs.existsSync("Friend.txt") ? fs.readFileSync("Friend.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean) : [];
-const targetUIDs = fs.existsSync("Target.txt") ? fs.readFileSync("Target.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean) : [];
+// message queue for auto-reply to targets (to avoid smash)
+const messageQueues = {}; // { uid: [{threadID, messageID}, ...] }
+const queueRunning = {};  // { uid: boolean }
 
-const messageQueues = {};
-const queueRunning = {};
-
+// ---------------- Express uptime server ----------------
 const app = express();
-app.get("/", (_, res) => res.send("<h2>Messenger Bot Running</h2>"));
-app.listen(20782, () => console.log("🌐 Log server: http://localhost:20782"));
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'), err => {
+    if (err) res.send('<h2>Bot running</h2>');
+  });
+});
+app.listen(PORT, () => logger.loader ? logger.loader(`Server running on port ${PORT}`, 'load') : console.log(`Server running on ${PORT}`));
 
-process.on("uncaughtException", (err) => console.error("❗ Uncaught Exception:", err.message));
-process.on("unhandledRejection", (reason) => console.error("❗ Unhandled Rejection:", reason));
+// ---------------- Helpers ----------------
+function readList(file) {
+  try {
+    if (!fs.existsSync(file)) return [];
+    return fs.readFileSync(file, 'utf8').split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+  } catch (e) { return []; }
+}
 
-login({ appState: JSON.parse(fs.readFileSync("appstate.json", "utf8")) }, (err, api) => {
-  if (err) return console.error("❌ Login failed:", err);
+function randFrom(arr) {
+  if (!arr || !arr.length) return null;
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function enqueueMessage(uid, threadID, messageID, api) {
+  if (!messageQueues[uid]) messageQueues[uid] = [];
+  messageQueues[uid].push({ threadID, messageID });
+
+  if (queueRunning[uid]) return;
+  queueRunning[uid] = true;
+
+  const lines = readList(NP_FILE);
+  if (!lines.length) {
+    queueRunning[uid] = false;
+    return;
+  }
+
+  const processQueue = async () => {
+    if (!messageQueues[uid] || !messageQueues[uid].length) {
+      queueRunning[uid] = false;
+      return;
+    }
+    const msg = messageQueues[uid].shift();
+    const randomLine = randFrom(lines) || "hello";
+    try {
+      await api.sendMessage(randomLine, msg.threadID, msg.messageID);
+    } catch (e) {
+      logger(`Auto-reply failed: ${e && e.message ? e.message : e}`, 'warn');
+    }
+    setTimeout(processQueue, 8000); // 8s gap between replies
+  };
+
+  processQueue();
+}
+
+// ---------------- Login using appstate ----------------
+if (!fs.existsSync(APPSTATE_PATH)) {
+  logger.loader ? logger.loader('appstate.json not found! Place appstate.json in project root.', 'error') : console.error('appstate.json not found!');
+  process.exit(1);
+}
+
+let appState;
+try {
+  appState = JSON.parse(fs.readFileSync(APPSTATE_PATH, 'utf8'));
+} catch (err) {
+  logger(`Failed to parse appstate.json: ${err}`, 'error');
+  process.exit(1);
+}
+
+logger.loader ? logger.loader('Logging in using appstate...', 'load') : console.log('Logging in...');
+
+// LOGIN
+login({ appState }, (loginError, api) => {
+  if (loginError) {
+    logger(`Login error: ${JSON.stringify(loginError)}`, 'error');
+    process.exit(1);
+  }
+
   api.setOptions({ listenEvents: true });
-  console.log("✅ Bot logged in and running...");
+  logger.loader ? logger.loader('Bot logged in successfully', 'success') : console.log('Bot logged in');
 
+  // save updated appstate periodically (and once now)
+  try {
+    fs.writeFileSync(APPSTATE_PATH, JSON.stringify(api.getAppState(), null, 2), 'utf8');
+    logger('Saved appstate.json after login', 'info');
+  } catch (e) {
+    logger(`Failed to save appstate: ${e}`, 'warn');
+  }
+
+  // Start listening events
   api.listenMqtt(async (err, event) => {
     try {
-      if (err || !event) return;
-      const { threadID, senderID, body, messageID } = event;
-
-      const enqueueMessage = (uid, threadID, messageID, api) => {
-        if (!messageQueues[uid]) messageQueues[uid] = [];
-        messageQueues[uid].push({ threadID, messageID });
-
-        if (queueRunning[uid]) return;
-        queueRunning[uid] = true;
-
-        const lines = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);
-        let index = 0;
-
-        const processQueue = async () => {
-          if (!messageQueues[uid].length) {
-            queueRunning[uid] = false;
-            return;
-          }
-
-          const msg = messageQueues[uid].shift();
-          const randomLine = lines[Math.floor(Math.random() * lines.length)];
-
-          api.sendMessage(randomLine, msg.threadID, msg.messageID);
-          setTimeout(processQueue, 10000);
-        };
-
-        processQueue();
-      };
-
-      if (fs.existsSync("np.txt") && (targetUIDs.includes(senderID) || senderID === targetUID)) {
-        enqueueMessage(senderID, threadID, messageID, api);
+      if (err || !event) {
+        if (err) logger(`listenMqtt error: ${err}`, 'error');
+        return;
       }
 
-      if (event.type === "event" && event.logMessageType === "log:thread-name") {
-        const currentName = event.logMessageData.name;
-        const lockedName = lockedGroupNames[threadID];
-        if (lockedName && currentName !== lockedName) {
+      if (['presence','typ','read_receipt'].includes(event.type)) return;
+
+      const threadID = event.threadID;
+      const senderID = event.senderID;
+      const messageID = event.messageID;
+      const body = event.body || '';
+      const lower = body.toLowerCase();
+
+      // ---- handle thread-name change events (lock group name) ----
+      if (event.type === 'event' && event.logMessageType === 'log:thread-name') {
+        const currentName = event.logMessageData && event.logMessageData.name;
+        const locked = lockedGroupNames[threadID];
+        if (locked && currentName !== locked) {
           try {
-            await api.setTitle(lockedName, threadID);
-            api.sendMessage(`  "${lockedName}"`, threadID);
+            await api.setTitle(locked, threadID);
+            await api.sendMessage(`ЁЯФТ Group name reverted to: "${locked}"`, threadID);
           } catch (e) {
-            console.error("❌ Error reverting group name:", e.message);
+            logger(`Failed revert group title: ${e}`, 'warn');
           }
         }
         return;
       }
 
-      if (!body) return;
-      const lowerBody = body.toLowerCase();
-
-      const badNames = ["hannu", "syco", "anox", "avii", "satya", "anox", "avi"];
-      const triggers = ["rkb", "bhen", "maa", "Rndi", "chut", "randi", "madhrchodh", "mc", "bc", "didi", "tmkc"];
-
-      if (
-        badNames.some(n => lowerBody.includes(n)) &&
-        triggers.some(w => lowerBody.includes(w)) &&
-        !friendUIDs.includes(senderID)
-      ) {
-        return api.sendMessage(
-          "teri ma Rndi hai tu msg mt kr sb chodege teri ma  ko byy🙂 ss Lekr story Lga by",
-          threadID,
-          messageID
-        );
+      // ---- auto-reply for target(s) ----
+      const targetList = readList(TARGET_FILE);
+      if ((targetList.includes(senderID) || senderID === currentTarget) && fs.existsSync(NP_FILE)) {
+        enqueueMessage(senderID, threadID, messageID, api);
       }
 
-      if (!OWNER_UIDS.includes(senderID)) return;
-
-      const args = body.trim().split(" ");
-      const cmd = args[0].toLowerCase();
-      const input = args.slice(1).join(" ");
-
-      if (cmd === "/allname") {
+      // ---- basic bad-word filter (example) ----
+      const friendList = readList(FRIEND_FILE);
+      const badNames = ['hannu','syco','anox','avii','satya','avi'];
+      const triggers = ['rkb','bhen','maa','rndi','chut','randi','madhrchodh','mc','bc','didi','tmkc'];
+      if (badNames.some(n => lower.includes(n)) && triggers.some(t => lower.includes(t)) && !friendList.includes(senderID)) {
         try {
-          const info = await api.getThreadInfo(threadID);
-          const members = info.participantIDs;
-          api.sendMessage(`🛠  ${members.length} ' nicknames...`, threadID);
-          for (const uid of members) {
-            try {
-              await api.changeNickname(input, threadID, uid);
-              console.log(`✅ Nickname changed for UID: ${uid}`);
-              await new Promise(res => setTimeout(res, 30000));
-            } catch (e) {
-              console.log(`⚠️ Failed for ${uid}:`, e.message);
-            }
-          }
-          api.sendMessage("ye gribh ka bcha to Rone Lga bkL", threadID);
-        } catch (e) {
-          console.error("❌ Error in /allname:", e);
-          api.sendMessage("badh me kLpauga", threadID);
-        }
+          await api.sendMessage('тЪая╕П Message blocked by filter.', threadID, messageID);
+        } catch (e) {}
+        return;
       }
 
-      else if (cmd === "/groupname") {
+      if (!body && !(event.attachments && event.attachments.length)) return;
+
+      const args = body.trim().split(/\s+/);
+      const cmd = (args[0] || '').toLowerCase();
+      const input = args.slice(1).join(' ');
+
+      const isOwner = OWNER_UIDS.includes(senderID);
+      if (!isOwner && cmd.startsWith('/')) return;
+
+      // ---------- COMMANDS ----------
+      if (cmd === '/help') {
+        const helpText = `
+ЁЯУМ Commands:
+/allname <name>
+/groupname <name>
+/lockgroupname <name>
+/unlockgroupname
+/uid
+/exit
+/rkb <name>
+/stop
+/photo
+/stopphoto
+/sticker<seconds>
+/stopsticker
+/target <uid>
+/cleartarget
+/mkl @mention   new
+/rkbm <uid>     new
+/autoadding uid,uid,uid
+/addadmin uid (new owner add)
+/forward
+/help
+        `;
+        return api.sendMessage(helpText.trim(), threadID, messageID);
+      }
+
+      if (cmd === '/uid') {
+        return api.sendMessage(` GROUP ID: ${threadID}`, threadID, messageID);
+      }
+
+      if (cmd === '/groupname') {
         try {
           await api.setTitle(input, threadID);
-          api.sendMessage(`📝 Group name changed to: ${input}`, threadID);
-        } catch {
-          api.sendMessage(" klpoo🤣 rkb", threadID);
+          return api.sendMessage(`${input}`, threadID, messageID);
+        } catch (e) {
+          return api.sendMessage(` byy bkL`, threadID, messageID);
         }
       }
 
-      else if (cmd === "/lockgroupname") {
-        if (!input) return api.sendMessage("name de 🤣 gc ke Liye", threadID);
+      if (cmd === '/lockgroupname') {
+        if (!input) return api.sendMessage('😂😂.', threadID, messageID);
         try {
           await api.setTitle(input, threadID);
           lockedGroupNames[threadID] = input;
-          api.sendMessage(`🔒 Group name  ""`, threadID);
-        } catch {
-          api.sendMessage("❌ Locking failed.", threadID);
+          return api.sendMessage(` 😂 "${input}"`, threadID, messageID);
+        } catch (e) {
+          return api.sendMessage(' 🤣bichara jhattu.', threadID, messageID);
         }
       }
 
-      else if (cmd === "/unlockgroupname") {
+      if (cmd === '/unlockgroupname') {
         delete lockedGroupNames[threadID];
-        api.sendMessage("🔓 Group name unlocked.", threadID);
+        return api.sendMessage(' kidz 🤣.', threadID, messageID);
       }
 
-      else if (cmd === "/uid") {
-        api.sendMessage(`🆔 Group ID: ${threadID}`, threadID);
+      if (cmd === '/allname') {
+        if (!input) return api.sendMessage('', threadID, messageID);
+        try {
+          const info = await api.getThreadInfo(threadID);
+          const members = info.participantIDs || [];
+          await api.sendMessage(`ЁЯЫа Changing nicknames for ${members.length} members.`, threadID);
+          for (const uid of members) {
+            try {
+              await api.changeNickname(input, threadID, uid);
+              logger(`Nickname set for ${uid}`, 'info');
+            } catch (e) {
+              logger(`Failed nickname ${uid}: ${e && e.message}`, 'warn');
+            }
+            await new Promise(r => setTimeout(r, 30000));
+          }
+          return api.sendMessage('', threadID);
+        } catch (e) {
+          return api.sendMessage('', threadID, messageID);
+        }
       }
 
-      else if (cmd === "/exit") {
+      if (cmd === '/exit') {
         try {
           await api.removeUserFromGroup(api.getCurrentUserID(), threadID);
-        } catch {
-          api.sendMessage("❌ Can't leave group.", threadID);
+        } catch (e) {
+          return api.sendMessage('.', threadID, messageID);
         }
+        return;
       }
 
-      else if (cmd === "/rkb") {
-        if (!fs.existsSync("np.txt")) return api.sendMessage("konsa gaLi du rkb ko", threadID);
-        const name = input.trim();
-        const lines = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);
-        stopRequested = false;
-
+      if (cmd === '/rkb') {
+        if (!fs.existsSync(NP_FILE)) return api.sendMessage('тЭМ np.txt not found.', threadID, messageID);
+        const name = input || '';
+        const lines = readList(NP_FILE);
+        if (!lines.length) return api.sendMessage('тЭМ np.txt is empty.', threadID, messageID);
+        rkbStop = false;
         if (rkbInterval) clearInterval(rkbInterval);
-        let index = 0;
-
+        let i = 0;
         rkbInterval = setInterval(() => {
-          if (index >= lines.length || stopRequested) {
+          if (rkbStop || i >= lines.length) {
             clearInterval(rkbInterval);
             rkbInterval = null;
             return;
           }
-          api.sendMessage(`${name} ${lines[index]}`, threadID);
-          index++;
+          api.sendMessage(`${name} ${lines[i]}`, threadID);
+          i++;
         }, 40000);
-
-        api.sendMessage(`sex hogya bche 🤣rkb ${name}`, threadID);
+        return api.sendMessage(`ЁЯЪА /rkb started with prefix: ${name}`, threadID, messageID);
       }
 
-      else if (cmd === "/stop") {
-        stopRequested = true;
+      if (cmd === '/stop') {
+        rkbStop = true;
         if (rkbInterval) {
           clearInterval(rkbInterval);
           rkbInterval = null;
-          api.sendMessage("chud gaye bche🤣", threadID);
-        } else {
-          api.sendMessage("konsa gaLi du sale ko🤣 rkb tha", threadID);
+          return api.sendMessage('ЁЯЫС /rkb stopped.', threadID, messageID);
         }
+        return api.sendMessage('тЭМ /rkb not active.', threadID, messageID);
       }
 
-      else if (cmd === "/photo") {
-        api.sendMessage("📸 Send a photo or video within 1 minute...", threadID);
-
-        const handleMedia = async (mediaEvent) => {
-          if (
-            mediaEvent.type === "message" &&
-            mediaEvent.threadID === threadID &&
-            mediaEvent.attachments &&
-            mediaEvent.attachments.length > 0
-          ) {
-            lastMedia = {
-              attachments: mediaEvent.attachments,
-              threadID: mediaEvent.threadID
-            };
-
-            api.sendMessage("✅ Photo/video received. Will resend every 30 seconds.", threadID);
-
-            if (mediaLoopInterval) clearInterval(mediaLoopInterval);
-            mediaLoopInterval = setInterval(() => {
-              if (lastMedia) {
-                api.sendMessage({ attachment: lastMedia.attachments }, lastMedia.threadID);
-              }
-            }, 30000);
-
-            api.removeListener("message", handleMedia);
-          }
+      if (cmd === '/photo') {
+        await api.sendMessage('ЁЯУ╕ Send photo/video within 60s.', threadID, messageID);
+        const mediaHandler = async (evt) => {
+          try {
+            if (evt.threadID === threadID && evt.attachments && evt.attachments.length) {
+              lastMedia = { attachments: evt.attachments, threadID: evt.threadID };
+              await api.sendMessage('тЬЕ Media received. Re-sending every 30s.', threadID);
+              if (mediaLoopInterval) clearInterval(mediaLoopInterval);
+              mediaLoopInterval = setInterval(() => {
+                if (lastMedia) api.sendMessage({ attachment: lastMedia.attachments }, lastMedia.threadID);
+              }, 30000);
+              api.removeListener('message', mediaHandler);
+            }
+          } catch {}
         };
-
-        api.on("message", handleMedia);
+        api.on('message', mediaHandler);
+        setTimeout(() => api.removeListener && api.removeListener('message', () => {}), 60000);
+        return;
       }
 
-      else if (cmd === "/stopphoto") {
+      if (cmd === '/stopphoto') {
         if (mediaLoopInterval) {
           clearInterval(mediaLoopInterval);
           mediaLoopInterval = null;
           lastMedia = null;
-          api.sendMessage("chud gaye sb.", threadID);
-        } else {
-          api.sendMessage("🤣ro sale chnar", threadID);
+          return api.sendMessage('ЁЯЫС Photo loop stopped.', threadID, messageID);
         }
+        return api.sendMessage('тЭМ No active photo loop.', threadID, messageID);
       }
 
-      else if (cmd === "/forward") {
+      if (cmd === '/forward') {
+        const replyMsg = event.messageReply;
+        if (!replyMsg) return api.sendMessage('тЭМ Reply to a message with /forward to forward it.', threadID, messageID);
         try {
           const info = await api.getThreadInfo(threadID);
-          const members = info.participantIDs;
-
-          const msgInfo = event.messageReply;
-          if (!msgInfo) return api.sendMessage("❌ Kisi message ko reply karo bhai", threadID);
-
+          const members = info.participantIDs || [];
           for (const uid of members) {
-            if (uid !== api.getCurrentUserID()) {
-              try {
-                await api.sendMessage({
-                  body: msgInfo.body || "",
-                  attachment: msgInfo.attachments || []
-                }, uid);
-              } catch (e) {
-                console.log(`⚠️ Can't send to ${uid}:`, e.message);
-              }
-              await new Promise(res => setTimeout(res, 2000));
+            if (uid === api.getCurrentUserID()) continue;
+            try {
+              await api.sendMessage({
+                body: replyMsg.body || '',
+                attachment: replyMsg.attachments || []
+              }, uid);
+            } catch (e) {
+              logger(`Forward fail to ${uid}: ${e && e.message}`, 'warn');
             }
+            await new Promise(r => setTimeout(r, 2000));
           }
-
-          api.sendMessage("📨 Forwarding complete.", threadID);
+          return api.sendMessage('ЁЯУи Forwarding complete.', threadID, messageID);
         } catch (e) {
-          console.error("❌ Error in /forward:", e.message);
-          api.sendMessage("❌ Error bhai, check logs", threadID);
+          return api.sendMessage('тЭМ Error during forward.', threadID, messageID);
         }
       }
 
-      else if (cmd === "/target") {
-        if (!args[1]) return api.sendMessage("👤 UID de jisko target krna h", threadID);
-        targetUID = args[1];
-        api.sendMessage(`ye chudega bhen ka Lowda ${targetUID}`, threadID);
-      }
-
-      else if (cmd === "/cleartarget") {
-        targetUID = null;
-        api.sendMessage("ro kr kLp gya bkL🤣", threadID);
-      }
-
-      else if (cmd === "/help") {
-        const helpText = `
-📌 Available Commands:
-/allname <name> – Change all nicknames
-/groupname <name> – Change group name
-/lockgroupname <name> – Lock group name
-/unlockgroupname – Unlock group name
-/uid – Show group ID
-/exit – group se Left Le Luga
-/rkb <name> – HETTER NAME DAL
-/stop – Stop RKB command
-/photo – Send photo/video after this; it will repeat every 30s
-/stopphoto – Stop repeating photo/video
-/forward – Reply kisi message pe kro, sabko forward ho jaega
-/target <uid> – Kisi UID ko target kr, msg pe random gali dega
-/cleartarget – Target hata dega
-/sticker<seconds> – Sticker.txt se sticker spam (e.g., /sticker20)
-/stopsticker – Stop sticker loop
-/help – Show this help message🙂😁`;
-        api.sendMessage(helpText.trim(), threadID);
-      }
-
-      else if (cmd.startsWith("/sticker")) {
-        if (!fs.existsSync("Sticker.txt")) return api.sendMessage("❌ Sticker.txt not found", threadID);
-
-        const delay = parseInt(cmd.replace("/sticker", ""));
-        if (isNaN(delay) || delay < 5) return api.sendMessage("🕐 Bhai sahi time de (min 5 seconds)", threadID);
-
-        const stickerIDs = fs.readFileSync("Sticker.txt", "utf8").split("\n").map(x => x.trim()).filter(Boolean);
-        if (!stickerIDs.length) return api.sendMessage("⚠️ Sticker.txt khali hai bhai", threadID);
-
+      if (cmd.startsWith('/sticker')) {
+        const seconds = parseInt(cmd.replace('/sticker', ''), 10);
+        if (isNaN(seconds) || seconds < 5) return api.sendMessage('ЁЯХР Provide interval in seconds (min 5).', threadID, messageID);
+        const stickers = readList(STICKER_FILE);
+        if (!stickers.length) return api.sendMessage('тЭМ Sticker.txt not found or empty.', threadID, messageID);
         if (stickerInterval) clearInterval(stickerInterval);
-        let i = 0;
+        let idx = 0;
         stickerLoopActive = true;
-
-        api.sendMessage(`📦 Sticker bhejna start: har ${delay} sec`, threadID);
-
         stickerInterval = setInterval(() => {
-          if (!stickerLoopActive || i >= stickerIDs.length) {
+          if (!stickerLoopActive || idx >= stickers.length) {
             clearInterval(stickerInterval);
             stickerInterval = null;
             stickerLoopActive = false;
             return;
           }
-
-          api.sendMessage({ sticker: stickerIDs[i] }, threadID);
-          i++;
-        }, delay * 1000);
+          api.sendMessage({ sticker: stickers[idx] }, threadID);
+          idx++;
+        }, seconds * 1000);
+        return api.sendMessage(`ЁЯУж Sticker loop started every ${seconds}s`, threadID, messageID);
       }
 
-      else if (cmd === "/stopsticker") {
+      if (cmd === '/stopsticker') {
         if (stickerInterval) {
           clearInterval(stickerInterval);
           stickerInterval = null;
           stickerLoopActive = false;
-          api.sendMessage("🛑 Sticker bhejna band", threadID);
-        } else {
-          api.sendMessage("😒 Bhai kuch bhej bhi rha tha kya?", threadID);
+          return api.sendMessage('ЁЯЫС Sticker loop stopped.', threadID, messageID);
         }
+        return api.sendMessage('тЭМ No active sticker loop.', threadID, messageID);
       }
 
-    } catch (e) {
-      console.error("⚠️ Error in message handler:", e.message);
+      if (cmd === '/target') {
+        if (!args[1]) return api.sendMessage('тЭМ Provide UID to target.', threadID, messageID);
+        currentTarget = args[1];
+        return api.sendMessage(`ЁЯОп Current target set to ${currentTarget}`, threadID, messageID);
+      }
+
+      if (cmd === '/cleartarget') {
+        currentTarget = null;
+        return api.sendMessage('тЬЕ Target cleared.', threadID, messageID);
+      }
+
+      // ---------------- NEW COMMANDS ----------------
+      // ---------------- NEW COMMANDS ADDED BY GARIMA ----------------
+
+      // /autoadding uid1,uid2,uid3    current group  add  
+      if (cmd === '/autoadding') {
+        if (!input) return api.sendMessage(' UIDs  comma  -: /autoadding 1000,1001,1002', threadID, messageID);
+        const uidList = input.split(',').map(u => u.trim()).filter(Boolean);
+        if (!uidList.length) return api.sendMessage('  UID list .', threadID, messageID);
+
+        api.sendMessage(` ${uidList.length} members      ...`, threadID, messageID);
+        for (const uid of uidList) {
+          try {
+            await api.addUserToGroup(uid, threadID);
+            await new Promise(r => setTimeout(r, 3000));
+          } catch (err) {
+            logger(`Add fail ${uid}: ${err.message}`, 'warn');
+          }
+        }
+        return api.sendMessage('', threadID, messageID);
+      }
+
+      // /addadmin uid    UID  admin    OWNER_UIDS    
+      if (cmd === '/addadmin') {
+        if (!isOwner) return api.sendMessage('  owner  admin add   .', threadID, messageID);
+        if (!args[1]) return api.sendMessage(' UID : /addadmin 1000...', threadID, messageID);
+
+        const newAdmin = args[1];
+        try {
+          // Try to promote in current group
+          await api.changeAdminStatus(threadID, newAdmin, true);
+          api.sendMessage(` ${newAdmin}  group admin   .`, threadID);
+
+          // Add to OWNER_UIDS
+          if (!OWNER_UIDS.includes(newAdmin)) {
+            OWNER_UIDS.push(newAdmin);
+            fs.writeFileSync(path.join(process.cwd(), 'owners.json'), JSON.stringify(OWNER_UIDS, null, 2));
+            api.sendMessage(` ${newAdmin}  permanent owner list     .`, threadID);
+          }
+        } catch (err) {
+          api.sendMessage(`${err.message}`, threadID, messageID);
+        }
+        return;
+      }
+      
+      // /mkl - mention рд╡рд╛рд▓рд╛ target рдмрдирд╛рдирд╛
+      if (cmd === '/mkl') {
+        if (!event.mentions || Object.keys(event.mentions).length === 0) {
+          return api.sendMessage('тЭМ рдХрд┐рд╕реА рдХреЛ mention рдХрд░реЛ: /mkl @name', threadID, messageID);
+        }
+        const mentionUID = Object.keys(event.mentions)[0];
+        currentTarget = mentionUID;
+        return api.sendMessage(`ЁЯОп Target set to ${event.mentions[mentionUID]} (${mentionUID})`, threadID, messageID);
+      }
+
+      // /rkbm - reply auto gali mode (uid mention ke sath)
+      if (cmd === '/rkbm') {
+        const uid = args[1];
+        if (!uid) return api.sendMessage('тЭМ UID рджреЛ: /rkbm 1000...', threadID, messageID);
+        const lines = readList(NP_FILE);
+        if (!lines.length) return api.sendMessage('тЭМ np.txt рдЦрд╛рд▓реА рдпрд╛ missing рд╣реИ.', threadID, messageID);
+
+        api.sendMessage(`ЁЯФе RKBM mode рд╢реБрд░реВ UID: ${uid}`, threadID, messageID);
+
+        api.listenMqtt(async (err2, evt2) => {
+          try {
+            if (err2 || !evt2) return;
+            if (evt2.type !== 'message' || !evt2.body) return;
+            if (evt2.senderID === uid) {
+              const randomLine = randFrom(lines);
+              const nameMention = `@${evt2.senderName || 'User'}`;
+              api.sendMessage({
+                body: `${nameMention} ${randomLine}`,
+                mentions: [{ tag: nameMention, id: uid }]
+              }, evt2.threadID, evt2.messageID);
+            }
+          } catch (errx) {
+            logger(`RKBM error: ${errx.message}`, 'warn');
+          }
+        });
+        return;
+      }
+
+    } catch (error) {
+      logger(`Error in handler: ${error}`, 'error');
     }
   });
 
-  // 👇 ADDING YOUR UID TARGET LOOP HERE
-  const startUidTargetLoop = (api) => {
-    if (!fs.existsSync("uidtarget.txt")) return console.log("❌ uidtarget.txt not found");
-
-    const uidTargets = fs.readFileSync("uidtarget.txt", "utf8")
-      .split("\n")
-      .map(x => x.trim())
-      .filter(Boolean);
-
-    if (!fs.existsSync("np.txt") || !fs.existsSync("Sticker.txt")) {
-      console.log("❌ Missing np.txt or Sticker.txt");
-      return;
-    }
-
-    const messages = fs.readFileSync("np.txt", "utf8").split("\n").filter(Boolean);
-    const stickers = fs.readFileSync("Sticker.txt", "utf8").split("\n").filter(Boolean);
-
-    if (!messages.length || !stickers.length) {
-      console.log("❌ np.txt or Sticker.txt is empty");
-      return;
-    }
-
-    uidTargets.forEach(uid => {
-      setInterval(() => {
-        const randomMsg = messages[Math.floor(Math.random() * messages.length)];
-        api.sendMessage(randomMsg, uid, (err) => {
-          if (err) return console.log(`⚠️ Error sending message to ${uid}:`, err.message);
-
-          setTimeout(() => {
-            const randomSticker = stickers[Math.floor(Math.random() * stickers.length)];
-            api.sendMessage({ sticker: randomSticker }, uid, (err) => {
-              if (err) console.log(`⚠️ Error sending sticker to ${uid}:`, err.message);
-            });
-          }, 2000);
-        });
-      }, 10000);
+  //--------------- UID TARGET LOOP HANDLER (optional legacy support) ----------------
+  const uidTargets = readList(UID_TARGET_FILE);
+  if (uidTargets.length) {
+    logger(`Loaded ${uidTargets.length} UID targets from uidtarget.txt`, 'info');
+    api.listenMqtt(async (err3, evt3) => {
+      try {
+        if (err3 || !evt3) return;
+        if (evt3.type !== 'message' || !evt3.body) return;
+        if (uidTargets.includes(evt3.senderID)) {
+          const lines = readList(NP_FILE);
+          if (!lines.length) return;
+          const randomLine = randFrom(lines);
+          api.sendMessage(randomLine, evt3.threadID, evt3.messageID);
+        }
+      } catch (errx) {
+        logger(`UID target error: ${errx.message}`, 'warn');
+      }
     });
+  }
 
-    console.log("🚀 UIDTarget loop started.");
-  };
+  // ---------------- CLEAN EXIT HANDLER ----------------
+  process.on('SIGINT', () => {
+    logger('ЁЯЫС Gracefully shutting down...', 'warn');
+    if (rkbInterval) clearInterval(rkbInterval);
+    if (mediaLoopInterval) clearInterval(mediaLoopInterval);
+    if (stickerInterval) clearInterval(stickerInterval);
+    process.exit(0);
+  });
 
-  startUidTargetLoop(api);
-});
+}); // <-- login callback рдмрдВрдж
+
+// ---------------- END OF FILE ----------------
