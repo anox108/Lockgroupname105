@@ -194,7 +194,7 @@ if (Object.keys(lockedGroupNames).length) {
         if (locked && currentName !== locked) {
           try {
             await api.setTitle(locked, threadID);
-            await api.sendMessage(`ЁЯФТ Group name reverted to: "${locked}"`, threadID);
+            await api.sendMessage(`"${locked}"`, threadID);
           } catch (e) {
             logger(`Failed revert group title: ${e}`, 'warn');
           }
