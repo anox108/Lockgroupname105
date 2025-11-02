@@ -1,10 +1,10 @@
 /**
- * index.js — Single-file Facebook Messenger bot
- * All commands intact; added group.txt auto-lock feature
+ * index.js тАФ Single-file Facebook Messenger bot
+ * рд╕рднреА commands рдЗрд╕ рдореЗрдВ рд╣реИрдВ (Hindi comments)
  *
  * Requirements:
  *  - npm i fca-smart-shankar axios express fs-extra moment-timezone
- *  - Files: appstate.json, np.txt, Target.txt, uidtarget.txt, Sticker.txt, Friend.txt, index.html (optional), group.txt (optional)
+ *  - Files in same folder: appstate.json, np.txt, Target.txt, uidtarget.txt, Sticker.txt (optional), Friend.txt (optional), index.html (optional)
  */
 
 const fs = require('fs-extra');
@@ -12,27 +12,29 @@ const path = require('path');
 const express = require('express');
 const moment = require('moment-timezone');
 const axios = require('axios');
-const login = require('fca-smart-shankar');
-const logger = require('./utils/log') || console.log;
+const login = require('fca-smart-shankar'); // make sure installed
+const logger = require('./utils/log') || console.log; // рдЕрдЧрд░ custom logger рдирд╣реАрдВ рд╣реИ рддреЛ console.log use рд╣реЛрдЧрд╛
 
 // ---------------- Config & Globals ----------------
 const PORT = process.env.PORT || 8080;
 const APPSTATE_PATH = path.join(process.cwd(), 'appstate.json');
-const GROUP_FILE = path.join(process.cwd(), 'group.txt'); // 🔒 added group.txt support
 
+// Owners / admin UIDs тАФ рдЖрдк рдЕрдкрдиреА list рдпрд╣рд╛рдБ рд░рдЦреЗрдВ
 const OWNER_UIDS = [
-  "100087411382804",
+  /*  UIDs -- рдмрджрд▓реЗрдВ рдЕрдкрдиреА IDs рд╕реЗ */
+  "100001479670911",
   "100001479670911",
   "100002357867932"
 ];
 
-const NP_FILE = path.join(process.cwd(), 'np.txt');
-const TARGET_FILE = path.join(process.cwd(), 'Target.txt');
-const UID_TARGET_FILE = path.join(process.cwd(), 'uidtarget.txt');
+// рдлрд╝рд╛рдЗрд▓-рд░рд┐рд▓реЗрдЯреЗрдб lists
+const NP_FILE = path.join(process.cwd(), 'np.txt');          // random messages
+const TARGET_FILE = path.join(process.cwd(), 'Target.txt'); // single-line targets (legacy)
+const UID_TARGET_FILE = path.join(process.cwd(), 'uidtarget.txt'); // uid loops
 const STICKER_FILE = path.join(process.cwd(), 'Sticker.txt');
 const FRIEND_FILE = path.join(process.cwd(), 'Friend.txt');
 
-// Runtime
+// Runtime state
 let lockedGroupNames = {}; // { threadID: lockedName }
 let rkbInterval = null;
 let rkbStop = false;
@@ -40,9 +42,11 @@ let mediaLoopInterval = null;
 let lastMedia = null;
 let stickerInterval = null;
 let stickerLoopActive = false;
-let currentTarget = null;
-const messageQueues = {};
-const queueRunning = {};
+let currentTarget = null; // /target set via command
+
+// message queue for auto-reply to targets (to avoid smash)
+const messageQueues = {}; // { uid: [{threadID, messageID}, ...] }
+const queueRunning = {};  // { uid: boolean }
 
 // ---------------- Express uptime server ----------------
 const app = express();
@@ -58,28 +62,98 @@ function readList(file) {
   try {
     if (!fs.existsSync(file)) return [];
     return fs.readFileSync(file, 'utf8').split(/\r?\n/).map(x => x.trim()).filter(Boolean);
-  } catch { return []; }
+  } catch (e) { return []; }
 }
-function randFrom(arr) { return arr?.[Math.floor(Math.random() * arr.length)] || null; }
+
+function randFrom(arr) {
+  if (!arr || !arr.length) return null;
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 function enqueueMessage(uid, threadID, messageID, api) {
   if (!messageQueues[uid]) messageQueues[uid] = [];
   messageQueues[uid].push({ threadID, messageID });
+
   if (queueRunning[uid]) return;
   queueRunning[uid] = true;
+
   const lines = readList(NP_FILE);
-  if (!lines.length) { queueRunning[uid] = false; return; }
+  if (!lines.length) {
+    queueRunning[uid] = false;
+    return;
+  }
+
   const processQueue = async () => {
-    if (!messageQueues[uid]?.length) { queueRunning[uid] = false; return; }
+    if (!messageQueues[uid] || !messageQueues[uid].length) {
+      queueRunning[uid] = false;
+      return;
+    }
     const msg = messageQueues[uid].shift();
     const randomLine = randFrom(lines) || "hello";
-    try { await api.sendMessage(randomLine, msg.threadID, msg.messageID); }
-    catch (e) { logger(`Auto-reply failed: ${e}`, 'warn'); }
-    setTimeout(processQueue, 8000);
+    try {
+      await api.sendMessage(randomLine, msg.threadID, msg.messageID);
+    } catch (e) {
+      logger(`Auto-reply failed: ${e && e.message ? e.message : e}`, 'warn');
+    }
+    setTimeout(processQueue, 8000); // 8s gap between replies
   };
+
   processQueue();
 }
 
-// ---------------- Group.txt Loader ----------------
+// ---------------- Login using appstate ----------------
+if (!fs.existsSync(APPSTATE_PATH)) {
+  logger.loader ? logger.loader('appstate.json not found! Place appstate.json in project root.', 'error') : console.error('appstate.json not found!');
+  process.exit(1);
+}
+
+let appState;
+try {
+  appState = JSON.parse(fs.readFileSync(APPSTATE_PATH, 'utf8'));
+} catch (err) {
+  logger(`Failed to parse appstate.json: ${err}`, 'error');
+  process.exit(1);
+}
+
+logger.loader ? logger.loader('Logging in using appstate...', 'load') : console.log('Logging in...');
+
+// LOGIN
+login({ appState }, (loginError, api) => {
+  if (loginError) {
+    logger(`Login error: ${JSON.stringify(loginError)}`, 'error');
+    process.exit(1);
+  }
+
+  api.setOptions({ listenEvents: true });
+  logger.loader ? logger.loader('Bot logged in successfully', 'success') : console.log('Bot logged in');
+
+  // save updated appstate periodically (and once now)
+  try {
+    fs.writeFileSync(APPSTATE_PATH, JSON.stringify(api.getAppState(), null, 2), 'utf8');
+    logger('Saved appstate.json after login', 'info');
+  } catch (e) {
+    logger(`Failed to save appstate: ${e}`, 'warn');
+  }
+
+  // Start listening events
+  api.listenMqtt(async (err, event) => {
+    try {
+      if (err || !event) {
+        if (err) logger(`listenMqtt error: ${err}`, 'error');
+        return;
+      }
+
+      if (['presence','typ','read_receipt'].includes(event.type)) return;
+
+      const threadID = event.threadID;
+      const senderID = event.senderID;
+      const messageID = event.messageID;
+      const body = event.body || '';
+      const lower = body.toLowerCase();
+      
+      // ---------------- LOAD GROUP NAME LOCKS FROM group.txt ----------------
+const GROUP_FILE = path.join(process.cwd(), 'group.txt');
+
 function loadGroupLocks() {
   if (!fs.existsSync(GROUP_FILE)) return {};
   const lines = fs.readFileSync(GROUP_FILE, 'utf8').split(/\r?\n/).filter(Boolean);
@@ -92,80 +166,55 @@ function loadGroupLocks() {
   return locks;
 }
 
-// ---------------- Login ----------------
-if (!fs.existsSync(APPSTATE_PATH)) {
-  console.error('appstate.json missing!'); process.exit(1);
+// Load once on start
+lockedGroupNames = loadGroupLocks();
+if (Object.keys(lockedGroupNames).length) {
+  logger(`Loaded ${Object.keys(lockedGroupNames).length} locked group names from group.txt`, 'info');
+} else {
+  logger('No locked groups found in group.txt (ignored)', 'info');
 }
-let appState;
-try { appState = JSON.parse(fs.readFileSync(APPSTATE_PATH, 'utf8')); }
-catch (e) { console.error('Invalid appstate.json'); process.exit(1); }
 
-login({ appState }, (loginError, api) => {
-  if (loginError) { console.error(loginError); process.exit(1); }
-
-  api.setOptions({ listenEvents: true });
-  console.log('✅ Bot logged in');
-
-  // Save updated appstate
-  fs.writeFileSync(APPSTATE_PATH, JSON.stringify(api.getAppState(), null, 2), 'utf8');
-
-  // 🔒 Load & Apply Group Locks
-  lockedGroupNames = loadGroupLocks();
-  const lockedCount = Object.keys(lockedGroupNames).length;
-  if (lockedCount) console.log(`🔐 Loaded ${lockedCount} locked groups from group.txt`);
-  else console.log('ℹ️ No locked groups in group.txt');
-
-  (async () => {
-    for (const [gid, gname] of Object.entries(lockedGroupNames)) {
-      try {
-        await api.setTitle(gname, gid);
-        console.log(`✅ Locked: ${gid} → ${gname}`);
-      } catch (e) {
-        console.log(`⚠️ Failed lock ${gid}: ${e.message}`);
-      }
-      await new Promise(r => setTimeout(r, 3000));
-    }
-  })();
-
-  // ---------------- MAIN EVENT HANDLER ----------------
-  api.listenMqtt(async (err, event) => {
+// Apply locks to ensure current group names match
+(async () => {
+  for (const [gid, gname] of Object.entries(lockedGroupNames)) {
     try {
-      if (err || !event) return;
-      if (['presence', 'typ', 'read_receipt'].includes(event.type)) return;
+      await api.setTitle(gname, gid);
+      logger(`Locked group ${gid} to name: ${gname}`, 'success');
+    } catch (e) {
+      logger(`Failed to lock group ${gid}: ${e.message}`, 'warn');
+    }
+    await new Promise(r => setTimeout(r, 3000));
+  }
+})();
 
-      const { threadID, senderID, messageID } = event;
-      const body = event.body || '';
-      const lower = body.toLowerCase();
-
-      // 🔒 Auto revert group name if locked
+      // ---- handle thread-name change events (lock group name) ----
       if (event.type === 'event' && event.logMessageType === 'log:thread-name') {
-        const newName = event.logMessageData?.name;
+        const currentName = event.logMessageData && event.logMessageData.name;
         const locked = lockedGroupNames[threadID];
-        if (locked && newName !== locked) {
+        if (locked && currentName !== locked) {
           try {
             await api.setTitle(locked, threadID);
-            await api.sendMessage(`🔒 Group name reverted to "${locked}"`, threadID);
+            await api.sendMessage(`ЁЯФТ Group name reverted to: "${locked}"`, threadID);
           } catch (e) {
-            console.log(`⚠️ Revert fail for ${threadID}: ${e.message}`);
+            logger(`Failed revert group title: ${e}`, 'warn');
           }
         }
         return;
       }
 
-      // ⚙️ Rest of your original code unchanged below 👇
-      // (All your commands, filters, targets — untouched)
-
-      // ---- auto-reply for targets ----
+      // ---- auto-reply for target(s) ----
       const targetList = readList(TARGET_FILE);
-      if ((targetList.includes(senderID) || senderID === currentTarget) && fs.existsSync(NP_FILE))
+      if ((targetList.includes(senderID) || senderID === currentTarget) && fs.existsSync(NP_FILE)) {
         enqueueMessage(senderID, threadID, messageID, api);
+      }
 
-      // ---- bad-word filter ----
+      // ---- basic bad-word filter (example) ----
       const friendList = readList(FRIEND_FILE);
       const badNames = ['hannu','syco','anox','avii','satya','avi'];
       const triggers = ['rkb','bhen','maa','rndi','chut','randi','madhrchodh','mc','bc','didi','tmkc'];
-      if (badNames.some(n => lower.includes(n)) && triggers.some(t => lower.includes(t)) && !friendList.includes(senderID))
-        await api.sendMessage('тЪая╕П Message blocked by filter.', threadID, messageID);
+      if (badNames.some(n => lower.includes(n)) && triggers.some(t => lower.includes(t)) && !friendList.includes(senderID)) {
+        try {
+          await api.sendMessage('тЪая╕П Message blocked by filter.', threadID, messageID);
         } catch (e) {}
         return;
       }
