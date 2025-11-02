@@ -1,5 +1,5 @@
 /**
- * index.js тАФ Single-file Facebook Messenger bot
+ * index.js тА Single-file Facebook Messenger bot
  * рд╕рднреА commands рдЗрд╕ рдореЗрдВ рд╣реИрдВ (Hindi comments)
  *
  * Requirements:
