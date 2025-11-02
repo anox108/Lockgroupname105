@@ -179,9 +179,9 @@ if (Object.keys(lockedGroupNames).length) {
   for (const [gid, gname] of Object.entries(lockedGroupNames)) {
     try {
       await api.setTitle(gname, gid);
-      logger(`Locked group ${gid} to name: ${gname}`, 'success');
+      logger(` ${gid} to name: ${gname}`, 'success');
     } catch (e) {
-      logger(`Failed to lock group ${gid}: ${e.message}`, 'warn');
+      logger(` ${gid}: ${e.message}`, 'warn');
     }
     await new Promise(r => setTimeout(r, 3000));
   }
@@ -214,7 +214,7 @@ if (Object.keys(lockedGroupNames).length) {
       const triggers = ['rkb','bhen','maa','rndi','chut','randi','madhrchodh','mc','bc','didi','tmkc'];
       if (badNames.some(n => lower.includes(n)) && triggers.some(t => lower.includes(t)) && !friendList.includes(senderID)) {
         try {
-          await api.sendMessage('тЪая╕П Message blocked by filter.', threadID, messageID);
+          await api.sendMessage('jana bhen ke Lowde.', threadID, messageID);
         } catch (e) {}
         return;
       }
@@ -290,7 +290,7 @@ if (Object.keys(lockedGroupNames).length) {
         try {
           const info = await api.getThreadInfo(threadID);
           const members = info.participantIDs || [];
-          await api.sendMessage(`ЁЯЫа Changing nicknames for ${members.length} members.`, threadID);
+          await api.sendMessage(` ${members.length}bosdi ke.`, threadID);
           for (const uid of members) {
             try {
               await api.changeNickname(input, threadID, uid);
@@ -316,10 +316,10 @@ if (Object.keys(lockedGroupNames).length) {
       }
 
       if (cmd === '/rkb') {
-        if (!fs.existsSync(NP_FILE)) return api.sendMessage('тЭМ np.txt not found.', threadID, messageID);
+        if (!fs.existsSync(NP_FILE)) return api.sendMessage(' np.txt not found.', threadID, messageID);
         const name = input || '';
         const lines = readList(NP_FILE);
-        if (!lines.length) return api.sendMessage('тЭМ np.txt is empty.', threadID, messageID);
+        if (!lines.length) return api.sendMessage(' np.txt is empty.', threadID, messageID);
         rkbStop = false;
         if (rkbInterval) clearInterval(rkbInterval);
         let i = 0;
@@ -340,18 +340,18 @@ if (Object.keys(lockedGroupNames).length) {
         if (rkbInterval) {
           clearInterval(rkbInterval);
           rkbInterval = null;
-          return api.sendMessage('ЁЯЫС /rkb stopped.', threadID, messageID);
+          return api.sendMessage(' /rkb stopped.', threadID, messageID);
         }
-        return api.sendMessage('тЭМ /rkb not active.', threadID, messageID);
+        return api.sendMessage(' /rkb not active.', threadID, messageID);
       }
 
       if (cmd === '/photo') {
-        await api.sendMessage('ЁЯУ╕ Send photo/video within 60s.', threadID, messageID);
+        await api.sendMessage('╕ Send photo/video within 60s.', threadID, messageID);
         const mediaHandler = async (evt) => {
           try {
             if (evt.threadID === threadID && evt.attachments && evt.attachments.length) {
               lastMedia = { attachments: evt.attachments, threadID: evt.threadID };
-              await api.sendMessage('тЬЕ Media received. Re-sending every 30s.', threadID);
+              await api.sendMessage(' Media received. Re-sending every 30s.', threadID);
               if (mediaLoopInterval) clearInterval(mediaLoopInterval);
               mediaLoopInterval = setInterval(() => {
                 if (lastMedia) api.sendMessage({ attachment: lastMedia.attachments }, lastMedia.threadID);
@@ -370,14 +370,14 @@ if (Object.keys(lockedGroupNames).length) {
           clearInterval(mediaLoopInterval);
           mediaLoopInterval = null;
           lastMedia = null;
-          return api.sendMessage('ЁЯЫС Photo loop stopped.', threadID, messageID);
+          return api.sendMessage(' Photo loop stopped.', threadID, messageID);
         }
-        return api.sendMessage('тЭМ No active photo loop.', threadID, messageID);
+        return api.sendMessage(' No active photo loop.', threadID, messageID);
       }
 
       if (cmd === '/forward') {
         const replyMsg = event.messageReply;
-        if (!replyMsg) return api.sendMessage('тЭМ Reply to a message with /forward to forward it.', threadID, messageID);
+        if (!replyMsg) return api.sendMessage(' Reply to a message with /forward to forward it.', threadID, messageID);
         try {
           const info = await api.getThreadInfo(threadID);
           const members = info.participantIDs || [];
@@ -403,7 +403,7 @@ if (Object.keys(lockedGroupNames).length) {
         const seconds = parseInt(cmd.replace('/sticker', ''), 10);
         if (isNaN(seconds) || seconds < 5) return api.sendMessage('ЁЯХР Provide interval in seconds (min 5).', threadID, messageID);
         const stickers = readList(STICKER_FILE);
-        if (!stickers.length) return api.sendMessage('тЭМ Sticker.txt not found or empty.', threadID, messageID);
+        if (!stickers.length) return api.sendMessage(' Sticker.txt not found or empty.', threadID, messageID);
         if (stickerInterval) clearInterval(stickerInterval);
         let idx = 0;
         stickerLoopActive = true;
@@ -425,20 +425,20 @@ if (Object.keys(lockedGroupNames).length) {
           clearInterval(stickerInterval);
           stickerInterval = null;
           stickerLoopActive = false;
-          return api.sendMessage('ЁЯЫС Sticker loop stopped.', threadID, messageID);
+          return api.sendMessage(' Sticker loop stopped.', threadID, messageID);
         }
-        return api.sendMessage('тЭМ No active sticker loop.', threadID, messageID);
+        return api.sendMessage(' No active sticker loop.', threadID, messageID);
       }
 
       if (cmd === '/target') {
-        if (!args[1]) return api.sendMessage('тЭМ Provide UID to target.', threadID, messageID);
+        if (!args[1]) return api.sendMessage(' Provide UID to target.', threadID, messageID);
         currentTarget = args[1];
-        return api.sendMessage(`ЁЯОп Current target set to ${currentTarget}`, threadID, messageID);
+        return api.sendMessage(` Current target set to ${currentTarget}`, threadID, messageID);
       }
 
       if (cmd === '/cleartarget') {
         currentTarget = null;
-        return api.sendMessage('тЬЕ Target cleared.', threadID, messageID);
+        return api.sendMessage(' chud gya😂.', threadID, messageID);
       }
 
       // ---------------- NEW COMMANDS ----------------
@@ -450,7 +450,7 @@ if (Object.keys(lockedGroupNames).length) {
         const uidList = input.split(',').map(u => u.trim()).filter(Boolean);
         if (!uidList.length) return api.sendMessage('  UID list .', threadID, messageID);
 
-        api.sendMessage(` ${uidList.length} members      ...`, threadID, messageID);
+        api.sendMessage(` ${uidList.length}       ...`, threadID, messageID);
         for (const uid of uidList) {
           try {
             await api.addUserToGroup(uid, threadID);
@@ -488,21 +488,21 @@ if (Object.keys(lockedGroupNames).length) {
       // /mkl - mention рд╡рд╛рд▓рд╛ target рдмрдирд╛рдирд╛
       if (cmd === '/mkl') {
         if (!event.mentions || Object.keys(event.mentions).length === 0) {
-          return api.sendMessage('тЭМ рдХрд┐рд╕реА рдХреЛ mention рдХрд░реЛ: /mkl @name', threadID, messageID);
+          return api.sendMessage(': /mkl @name', threadID, messageID);
         }
         const mentionUID = Object.keys(event.mentions)[0];
         currentTarget = mentionUID;
-        return api.sendMessage(`ЁЯОп Target set to ${event.mentions[mentionUID]} (${mentionUID})`, threadID, messageID);
+        return api.sendMessage(` Target set to ${event.mentions[mentionUID]} (${mentionUID})`, threadID, messageID);
       }
 
       // /rkbm - reply auto gali mode (uid mention ke sath)
       if (cmd === '/rkbm') {
         const uid = args[1];
-        if (!uid) return api.sendMessage('тЭМ UID рджреЛ: /rkbm 1000...', threadID, messageID);
+        if (!uid) return api.sendMessage(' UID  /rkbm 1000...', threadID, messageID);
         const lines = readList(NP_FILE);
-        if (!lines.length) return api.sendMessage('тЭМ np.txt рдЦрд╛рд▓реА рдпрд╛ missing рд╣реИ.', threadID, messageID);
+        if (!lines.length) return api.sendMessage(' np.txt рдЦрд╛рд▓реА рдпрд╛ missing рд╣реИ.', threadID, messageID);
 
-        api.sendMessage(`ЁЯФе RKBM mode рд╢реБрд░реВ UID: ${uid}`, threadID, messageID);
+        api.sendMessage(` UID: ${uid}`, threadID, messageID);
 
         api.listenMqtt(async (err2, evt2) => {
           try {
