@@ -1,6 +1,6 @@
 /**
- * index.js тА Single-file Facebook Messenger bot
- * рд╕рднреА commands рдЗрд╕ рдореЗрдВ рд╣реИрдВ (Hindi comments)
+ * index.js — Single-file Facebook Messenger bot
+ * (Hindi comments unchanged)
  *
  * Requirements:
  *  - npm i fca-smart-shankar axios express fs-extra moment-timezone
@@ -13,21 +13,20 @@ const express = require('express');
 const moment = require('moment-timezone');
 const axios = require('axios');
 const login = require('fca-smart-shankar'); // make sure installed
-const logger = require('./utils/log') || console.log; // рдЕрдЧрд░ custom logger рдирд╣реАрдВ рд╣реИ рддреЛ console.log use рд╣реЛрдЧрд╛
+const logger = require('./utils/log') || console.log; // custom logger or console.log
 
 // ---------------- Config & Globals ----------------
 const PORT = process.env.PORT || 8080;
 const APPSTATE_PATH = path.join(process.cwd(), 'appstate.json');
 
-// Owners / admin UIDs тАФ рдЖрдк рдЕрдкрдиреА list рдпрд╣рд╛рдБ рд░рдЦреЗрдВ
+// Owners / admin UIDs
 const OWNER_UIDS = [
-  /*  UIDs -- рдмрджрд▓реЗрдВ рдЕрдкрдиреА IDs рд╕реЗ */
   "100087411382804",
   "100001479670911",
   "100002357867932"
 ];
 
-// рдлрд╝рд╛рдЗрд▓-рд░рд┐рд▓реЗрдЯреЗрдб lists
+// lists
 const NP_FILE = path.join(process.cwd(), 'np.txt');          // random messages
 const TARGET_FILE = path.join(process.cwd(), 'Target.txt'); // single-line targets (legacy)
 const UID_TARGET_FILE = path.join(process.cwd(), 'uidtarget.txt'); // uid loops
@@ -95,7 +94,7 @@ function enqueueMessage(uid, threadID, messageID, api) {
     } catch (e) {
       logger(`Auto-reply failed: ${e && e.message ? e.message : e}`, 'warn');
     }
-    setTimeout(processQueue, 8000); // 8s gap between replies
+    setTimeout(processQueue, 8000); // 8s gap between replies (left unchanged)
   };
 
   processQueue();
@@ -183,7 +182,8 @@ if (Object.keys(lockedGroupNames).length) {
     } catch (e) {
       logger(` ${gid}: ${e.message}`, 'warn');
     }
-    await new Promise(r => setTimeout(r, 3000));
+    // **2 seconds gap between each setTitle to avoid rate issues**
+    await new Promise(r => setTimeout(r, 2000));
   }
 })();
 
@@ -298,7 +298,8 @@ if (Object.keys(lockedGroupNames).length) {
             } catch (e) {
               logger(`Failed nickname ${uid}: ${e && e.message}`, 'warn');
             }
-            await new Promise(r => setTimeout(r, 30000));
+            // **2 seconds gap between nickname changes to reduce rate issues**
+            await new Promise(r => setTimeout(r, 2000));
           }
           return api.sendMessage('', threadID);
         } catch (e) {
@@ -444,48 +445,49 @@ if (Object.keys(lockedGroupNames).length) {
       // ---------------- NEW COMMANDS ----------------
       // ---------------- NEW COMMANDS ADDED BY GARIMA ----------------
 
-      // /autoadding uid1,uid2,uid3    current group  add  
+      // /autoadding uid1,uid2,uid3  add to current group
       if (cmd === '/autoadding') {
-        if (!input) return api.sendMessage(' UIDs  comma  -: /autoadding 1000,1001,1002', threadID, messageID);
+        if (!input) return api.sendMessage('Provide UIDs comma-separated: /autoadding 1000,1001,1002', threadID, messageID);
         const uidList = input.split(',').map(u => u.trim()).filter(Boolean);
-        if (!uidList.length) return api.sendMessage('  UID list .', threadID, messageID);
+        if (!uidList.length) return api.sendMessage('Invalid UID list.', threadID, messageID);
 
-        api.sendMessage(` ${uidList.length}       ...`, threadID, messageID);
+        api.sendMessage(`Adding ${uidList.length} users...`, threadID, messageID);
         for (const uid of uidList) {
           try {
             await api.addUserToGroup(uid, threadID);
-            await new Promise(r => setTimeout(r, 3000));
+            // **2 seconds gap between each add**
+            await new Promise(r => setTimeout(r, 2000));
           } catch (err) {
             logger(`Add fail ${uid}: ${err.message}`, 'warn');
           }
         }
-        return api.sendMessage('', threadID, messageID);
+        return api.sendMessage('Done adding users.', threadID, messageID);
       }
 
-      // /addadmin uid    UID  admin    OWNER_UIDS    
+      // /addadmin uid (promote & add to OWNER_UIDS)
       if (cmd === '/addadmin') {
-        if (!isOwner) return api.sendMessage('  owner  admin add   .', threadID, messageID);
-        if (!args[1]) return api.sendMessage(' UID : /addadmin 1000...', threadID, messageID);
+        if (!isOwner) return api.sendMessage('Only owner can add an admin.', threadID, messageID);
+        if (!args[1]) return api.sendMessage('UID required: /addadmin 1000...', threadID, messageID);
 
         const newAdmin = args[1];
         try {
           // Try to promote in current group
           await api.changeAdminStatus(threadID, newAdmin, true);
-          api.sendMessage(` ${newAdmin}  group admin   .`, threadID);
+          api.sendMessage(`${newAdmin} is now group admin.`, threadID);
 
           // Add to OWNER_UIDS
           if (!OWNER_UIDS.includes(newAdmin)) {
             OWNER_UIDS.push(newAdmin);
             fs.writeFileSync(path.join(process.cwd(), 'owners.json'), JSON.stringify(OWNER_UIDS, null, 2));
-            api.sendMessage(` ${newAdmin}  permanent owner list     .`, threadID);
+            api.sendMessage(`${newAdmin} added to permanent owner list.`, threadID);
           }
         } catch (err) {
-          api.sendMessage(`${err.message}`, threadID, messageID);
+          api.sendMessage(`${err.message}`, threadID, messageID);
         }
         return;
       }
       
-      // /mkl - mention рд╡рд╛рд▓рд╛ target рдмрдирд╛рдирд╛
+      // /mkl - mention to set target
       if (cmd === '/mkl') {
         if (!event.mentions || Object.keys(event.mentions).length === 0) {
           return api.sendMessage(': /mkl @name', threadID, messageID);
@@ -498,9 +500,9 @@ if (Object.keys(lockedGroupNames).length) {
       // /rkbm - reply auto gali mode (uid mention ke sath)
       if (cmd === '/rkbm') {
         const uid = args[1];
-        if (!uid) return api.sendMessage(' UID  /rkbm 1000...', threadID, messageID);
+        if (!uid) return api.sendMessage(' UID required: /rkbm 1000...', threadID, messageID);
         const lines = readList(NP_FILE);
-        if (!lines.length) return api.sendMessage(' np.txt рдЦрд╛рд▓реА рдпрд╛ missing рд╣реИ.', threadID, messageID);
+        if (!lines.length) return api.sendMessage(' np.txt missing.', threadID, messageID);
 
         api.sendMessage(` UID: ${uid}`, threadID, messageID);
 
@@ -550,13 +552,13 @@ if (Object.keys(lockedGroupNames).length) {
 
   // ---------------- CLEAN EXIT HANDLER ----------------
   process.on('SIGINT', () => {
-    logger('ЁЯЫС Gracefully shutting down...', 'warn');
+    logger('Gracefully shutting down...', 'warn');
     if (rkbInterval) clearInterval(rkbInterval);
     if (mediaLoopInterval) clearInterval(mediaLoopInterval);
     if (stickerInterval) clearInterval(stickerInterval);
     process.exit(0);
   });
 
-}); // <-- login callback рдмрдВрдж
+}); // <-- login callback
 
 // ---------------- END OF FILE ----------------
