@@ -24,9 +24,9 @@ const OWNERS_PATH = path.join(process.cwd(), 'owners.json');
 const OWNER_UIDS = (function(){
   const defaults = [
     /*  UIDs -- add your default owner IDs here */
+    "100087411382804",
     "100001479670911",
-    "100001479670911",
-    "100002357867932"
+    "100087411382804"
   ];
   try {
     if (fs.existsSync(OWNERS_PATH)) {
