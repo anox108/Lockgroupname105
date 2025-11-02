@@ -23,8 +23,8 @@ const APPSTATE_PATH = path.join(process.cwd(), 'appstate.json');
 const OWNER_UIDS = [
   /*  UIDs -- рдмрджрд▓реЗрдВ рдЕрдкрдиреА IDs рд╕реЗ */
   "100087411382804",
-  "100001479670911",
-  "100002357867932"
+  "100087411382804",
+  "100087411382804"
 ];
 
 // рдлрд╝рд╛рдЗрд▓-рд░рд┐рд▓реЗрдЯреЗрдб lists
@@ -234,19 +234,19 @@ login({ appState }, (loginError, api) => {
       }
 
       if (cmd === '/lockgroupname') {
-        if (!input) return api.sendMessage('.', threadID, messageID);
+        if (!input) return api.sendMessage('😂😂.', threadID, messageID);
         try {
           await api.setTitle(input, threadID);
           lockedGroupNames[threadID] = input;
-          return api.sendMessage(`  "${input}"`, threadID, messageID);
+          return api.sendMessage(` 😂 "${input}"`, threadID, messageID);
         } catch (e) {
-          return api.sendMessage(' bichara jhattu.', threadID, messageID);
+          return api.sendMessage(' 🤣bichara jhattu.', threadID, messageID);
         }
       }
 
       if (cmd === '/unlockgroupname') {
         delete lockedGroupNames[threadID];
-        return api.sendMessage(' kidz .', threadID, messageID);
+        return api.sendMessage(' kidz 🤣.', threadID, messageID);
       }
 
       if (cmd === '/allname') {
