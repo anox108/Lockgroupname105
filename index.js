@@ -1,10 +1,10 @@
 /**
- * index.js — Single-file Facebook Messenger bot
- * सभी commands इस में हैं (Hindi comments)
+ * index.js тАФ Single-file Facebook Messenger bot
+ * рд╕рднреА commands рдЗрд╕ рдореЗрдВ рд╣реИрдВ (Hindi comments)
  *
  * Requirements:
  *  - npm i fca-smart-shankar axios express fs-extra moment-timezone
- *  - Files in same folder: appstate.json, np.txt, Target.txt, uidtarget.txt, Sticker.txt (optional), Friend.txt (optional), index.html (optional), owners.json (optional)
+ *  - Files in same folder: appstate.json, np.txt, Target.txt, uidtarget.txt, Sticker.txt (optional), Friend.txt (optional), index.html (optional)
  */
 
 const fs = require('fs-extra');
@@ -13,34 +13,21 @@ const express = require('express');
 const moment = require('moment-timezone');
 const axios = require('axios');
 const login = require('fca-smart-shankar'); // make sure installed
-const logger = require('./utils/log') || console.log; // custom logger or console.log
+const logger = require('./utils/log') || console.log; // рдЕрдЧрд░ custom logger рдирд╣реАрдВ рд╣реИ рддреЛ console.log use рд╣реЛрдЧрд╛
 
 // ---------------- Config & Globals ----------------
 const PORT = process.env.PORT || 8080;
 const APPSTATE_PATH = path.join(process.cwd(), 'appstate.json');
-const OWNERS_PATH = path.join(process.cwd(), 'owners.json');
 
-// Owners / admin UIDs — default list (will be overridden by owners.json if present)
-const OWNER_UIDS = (function(){
-  const defaults = [
-    /*  UIDs -- add your default owner IDs here */
-    "100087411382804",
-    "100001479670911",
-    "100087411382804"
-  ];
-  try {
-    if (fs.existsSync(OWNERS_PATH)) {
-      const data = fs.readFileSync(OWNERS_PATH, 'utf8');
-      const parsed = JSON.parse(data);
-      if (Array.isArray(parsed) && parsed.length) return parsed;
-    }
-  } catch (e) {
-    logger(`Failed to load owners.json: ${e.message}`, 'warn');
-  }
-  return defaults;
-})();
+// Owners / admin UIDs тАФ рдЖрдк рдЕрдкрдиреА list рдпрд╣рд╛рдБ рд░рдЦреЗрдВ
+const OWNER_UIDS = [
+  /*  UIDs -- рдмрджрд▓реЗрдВ рдЕрдкрдиреА IDs рд╕реЗ */
+  "100001479670911",
+  "100001479670911",
+  "100002357867932"
+];
 
-// file lists
+// рдлрд╝рд╛рдЗрд▓-рд░рд┐рд▓реЗрдЯреЗрдб lists
 const NP_FILE = path.join(process.cwd(), 'np.txt');          // random messages
 const TARGET_FILE = path.join(process.cwd(), 'Target.txt'); // single-line targets (legacy)
 const UID_TARGET_FILE = path.join(process.cwd(), 'uidtarget.txt'); // uid loops
@@ -247,19 +234,19 @@ login({ appState }, (loginError, api) => {
       }
 
       if (cmd === '/lockgroupname') {
-        if (!input) return api.sendMessage('😂😂.', threadID, messageID);
+        if (!input) return api.sendMessage('.', threadID, messageID);
         try {
           await api.setTitle(input, threadID);
           lockedGroupNames[threadID] = input;
-          return api.sendMessage(` 😂 "${input}"`, threadID, messageID);
+          return api.sendMessage(`  "${input}"`, threadID, messageID);
         } catch (e) {
-          return api.sendMessage(' 🤣bichara jhattu.', threadID, messageID);
+          return api.sendMessage(' bichara jhattu.', threadID, messageID);
         }
       }
 
       if (cmd === '/unlockgroupname') {
         delete lockedGroupNames[threadID];
-        return api.sendMessage(' kidz 🤣.', threadID, messageID);
+        return api.sendMessage(' kidz .', threadID, messageID);
       }
 
       if (cmd === '/allname') {
