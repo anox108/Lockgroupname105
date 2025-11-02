@@ -23,7 +23,7 @@ const APPSTATE_PATH = path.join(process.cwd(), 'appstate.json');
 const OWNER_UIDS = [
   /*  UIDs -- рдмрджрд▓реЗрдВ рдЕрдкрдиреА IDs рд╕реЗ */
   "100001479670911",
-  "100001479670911",
+  "61578609444754",
   "100002357867932"
 ];
 
