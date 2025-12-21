@@ -215,7 +215,7 @@ if (Object.keys(lockedGroupNames).length) {
       const triggers = ['rkb','bhen','maa','rndi','chut','randi','madhrchodh','mc','bc','didi','tmkc'];
       if (badNames.some(n => lower.includes(n)) && triggers.some(t => lower.includes(t)) && !friendList.includes(senderID)) {
         try {
-          await api.sendMessage('тЪая╕П Message blocked by filter.', threadID, messageID);
+          await api.sendMessage('teri mummy Rndi hai message mt kr 🙏🙏🙏.', threadID, messageID);
         } catch (e) {}
         return;
       }
