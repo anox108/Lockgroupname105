@@ -178,7 +178,7 @@ login({ appState }, (loginError, api) => {
       const triggers = ['rkb','bhen','maa','rndi','chut','randi','madhrchodh','mc','bc','didi','tmkc'];
       if (badNames.some(n => lower.includes(n)) && triggers.some(t => lower.includes(t)) && !friendList.includes(senderID)) {
         try {
-          await api.sendMessage('тЪая╕П Message blocked by filter.', threadID, messageID);
+          await api.sendMessage('Teri mummy Rndi hai ab message mt kr jute se maruga nhi to byy ek hi baat 100 bar boLuga teri ma ka bosda.', threadID, messageID);
         } catch (e) {}
         return;
       }
